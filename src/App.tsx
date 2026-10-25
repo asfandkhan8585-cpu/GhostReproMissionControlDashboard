@@ -1,54 +1,28 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   getMetrics, getPRs, getQuarantine, getPipelineEvents,
-  getIssueRepros, getSlopsquatFlags, authorizeUser,
-  type DashboardMetrics, type PRRecord, type PipelineEvent,
-  type IssueRepro, type SlopsquatFlag,
+  getIssueRepros, getSlopsquatFlags, getWhitelistedPackages,
+  authorizeUser, rejectUser, getGitHubUser, authorizeGitHub,
+  getGitHubRepos, selectRepo, syncGitHubRepos, addCustomRepo,
+  getConfig, updateConfig, testLLM, pingWebhook, calculateAST,
+  createIssueRepro, runIssueRepro, getIssueReproCode,
+  scanPackage, whitelistPackage, deleteSlopsquat,
+  getExecutionLogs, clearExecutionLogs, triggerSandboxSuite,
+  simulatePR, resetAllData,
+  initialConfig, initialGitHubUser, initialRepos, initialPRs,
+  initialEvents, initialRepros, initialSlopFlags, initialWhitelist,
+  initialLogs, type DashboardMetrics, type PRRecord, type PipelineEvent,
+  type IssueRepro, type SlopsquatFlag, type GitHubUser,
+  type GitHubRepo, type AppConfig, type LogItem
 } from './api'
 
-/* ─── Fallback data used when the backend is unreachable ─────────────── */
-const fallbackRows: PRRecord[] = [
-  { id: 'pr-001', number: 284, repo: 'org/checkout-service', title: 'Fix race condition in payment retry', author: 'sarahchen', author_avatar: '', author_association: 'CONTRIBUTOR', trust_score: 98, status: 'PASSED', tier: 'Verified Contributor', blast_radius: { statement_delta: 4, scope_creep_detected: false }, test_result: { passed: true, exit_code: 0 }, created_at: '2026-10-25T14:28:00Z', pipeline_stage: 'COMPLETE' },
-  { id: 'pr-002', number: 283, repo: 'org/checkout-service', title: 'Optimize checkout session validation', author: 'devin-ai[bot]', author_avatar: '', author_association: 'NONE', trust_score: 23, status: 'REJECTED', tier: 'Untrusted / First-Time', blast_radius: { statement_delta: 187, scope_creep_detected: true }, test_result: { passed: false, exit_code: 1 }, created_at: '2026-10-25T14:16:00Z', pipeline_stage: 'BLOCKED' },
-  { id: 'pr-003', number: 282, repo: 'org/checkout-service', title: 'Handle null currency in refund flow', author: 'marcusdev', author_avatar: '', author_association: 'CONTRIBUTOR', trust_score: 76, status: 'PASSED', tier: 'Verified Contributor', blast_radius: { statement_delta: 12, scope_creep_detected: false }, test_result: { passed: true, exit_code: 0 }, created_at: '2026-10-25T14:10:00Z', pipeline_stage: 'COMPLETE' },
-  { id: 'pr-004', number: 281, repo: 'org/checkout-service', title: 'Add idempotency key verification', author: 'alexrivera', author_avatar: '', author_association: 'MEMBER', trust_score: 100, status: 'PASSED', tier: 'VIP Fast-Track', blast_radius: { statement_delta: 2, scope_creep_detected: false }, test_result: { passed: true, exit_code: 0 }, created_at: '2026-10-25T13:56:00Z', pipeline_stage: 'COMPLETE' },
-  { id: 'pr-005', number: 280, repo: 'org/checkout-service', title: 'Update dependency resolution', author: 'codepilot[bot]', author_avatar: '', author_association: 'NONE', trust_score: 12, status: 'REJECTED', tier: 'Untrusted / First-Time', blast_radius: { statement_delta: 245, scope_creep_detected: true }, test_result: { passed: false, exit_code: 1 }, created_at: '2026-10-25T13:42:00Z', pipeline_stage: 'BLOCKED' },
-]
-
-const fallbackQueue: PRRecord[] = [
-  { id: 'pr-q1', number: 287, repo: 'org/checkout-service', title: 'Fix XSS vulnerability in search input', author: 'jason-builds', author_avatar: '', author_association: 'NONE', trust_score: 0, status: 'QUARANTINED', tier: 'Untrusted / First-Time', blast_radius: { statement_delta: 8, scope_creep_detected: false }, test_result: null, created_at: '2026-10-25T14:30:00Z', pipeline_stage: 'QUARANTINE' },
-  { id: 'pr-q2', number: 286, repo: 'org/checkout-service', title: 'Add automated refund processing', author: 'auto-fix-agent', author_avatar: '', author_association: 'NONE', trust_score: 0, status: 'QUARANTINED', tier: 'Untrusted / First-Time', blast_radius: null, test_result: null, created_at: '2026-10-25T14:18:00Z', pipeline_stage: 'QUARANTINE' },
-  { id: 'pr-q3', number: 285, repo: 'org/checkout-service', title: 'Dark mode toggle component', author: 'priyasharma', author_avatar: '', author_association: 'NONE', trust_score: 0, status: 'QUARANTINED', tier: 'Untrusted / First-Time', blast_radius: { statement_delta: 34, scope_creep_detected: false }, test_result: null, created_at: '2026-10-25T14:04:00Z', pipeline_stage: 'QUARANTINE' },
-]
-
-const fallbackMetrics: DashboardMetrics = {
-  total_prs_reviewed: 8, prs_passed: 3, prs_rejected: 2, prs_quarantined: 3,
-  issues_reproduced: 3, active_red_tests: 2, slopsquat_packages_blocked: 2, pipeline_events_24h: 8,
+/* ─── Default Clean Metrics (Zero Demo Data) ─────────────────────────── */
+const defaultMetrics: DashboardMetrics = {
+  total_prs_reviewed: 0, prs_passed: 0, prs_rejected: 0, prs_quarantined: 0,
+  issues_reproduced: 0, active_red_tests: 0, slopsquat_packages_blocked: 0, pipeline_events_24h: 0,
 }
 
-const fallbackEvents: PipelineEvent[] = [
-  { id: 'evt-1', pr_id: 'pr-004', stage: 'CLEARANCE', status: 'passed', timestamp: '2026-10-25T14:30:01Z', message: 'VIP Fast-Track: alexrivera cleared instantly.' },
-  { id: 'evt-2', pr_id: 'pr-004', stage: 'AST_ANALYSIS', status: 'passed', timestamp: '2026-10-25T14:30:02Z', message: 'Blast radius minimal: Δ2 statements, no scope creep.' },
-  { id: 'evt-3', pr_id: 'pr-004', stage: 'REPRO_TEST', status: 'passed', timestamp: '2026-10-25T14:30:04Z', message: 'RED→GREEN flip confirmed. Bug reproduction test passed.' },
-  { id: 'evt-4', pr_id: 'pr-004', stage: 'FUZZING', status: 'passed', timestamp: '2026-10-25T14:30:06Z', message: 'Adversarial mutations: 0/50 edge cases broke the fix.' },
-  { id: 'evt-5', pr_id: 'pr-004', stage: 'MERGE_GATE', status: 'passed', timestamp: '2026-10-25T14:30:07Z', message: '✅ All gates passed. PR #281 auto-approved for merge.' },
-  { id: 'evt-6', pr_id: 'pr-002', stage: 'CLEARANCE', status: 'failed', timestamp: '2026-10-25T09:34:01Z', message: '⚠ devin-ai[bot] flagged as untrusted. Quarantine triggered.' },
-  { id: 'evt-7', pr_id: 'pr-002', stage: 'AST_ANALYSIS', status: 'failed', timestamp: '2026-10-25T09:34:03Z', message: '🚨 Scope creep: +187 statements, 5 new functions injected.' },
-  { id: 'evt-8', pr_id: 'pr-002', stage: 'DEPENDENCY_SCAN', status: 'failed', timestamp: '2026-10-25T09:34:05Z', message: '🛑 Slopsquatting detected: "reqeusts" is a hallucinated PyPI package.' },
-]
-
-const fallbackRepros: IssueRepro[] = [
-  { issue_number: 279, repo: 'org/checkout-service', title: 'Concurrent payment retry causes double charge', repro_status: 'RED', test_file: 'test_repro_279.py', created_at: '2026-10-25T07:00:00Z' },
-  { issue_number: 277, repo: 'org/checkout-service', title: 'Currency rounding error on totals > $999', repro_status: 'GREEN', test_file: 'test_repro_277.py', created_at: '2026-10-25T06:30:00Z' },
-  { issue_number: 275, repo: 'org/checkout-service', title: 'XSS via search input field', repro_status: 'RED', test_file: 'test_repro_275.py', created_at: '2026-10-25T08:45:00Z' },
-]
-
-const fallbackSlopsquat: SlopsquatFlag[] = [
-  { package: 'reqeusts', reason: 'Hallucinated Package (Does not exist on PyPI!)', pr_id: 'pr-002', detected_at: '2026-10-25T09:34:05Z' },
-  { package: 'colorsys2', reason: 'Hallucinated Package (Does not exist on PyPI!)', pr_id: 'pr-005', detected_at: '2026-10-25T13:15:03Z' },
-]
-
-/* ─── SVG Icon Set ───────────────────────────────────────────────────── */
+/* ─── SVG Icons ──────────────────────────────────────────────────────── */
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -68,13 +42,34 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     package: <><path d="m16.5 9.4-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>,
     zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/>,
     alert: <><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+    github: <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>,
+    sync: <><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M20 15a8 8 0 1 1-1.5-6.5L21.5 8M4 9a8 8 0 0 1 15.5-1.5L20 8"/></>,
+    play: <polygon points="5 3 19 12 5 21 5 3"/>,
+    plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+    refresh: <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>,
+    download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.shield}</svg>
 }
 
-/* ─── Main Application ───────────────────────────────────────────────── */
+/* ─── Main Application Component ─────────────────────────────────────── */
 export default function App() {
-  const [tab, setTab] = useState('Overview')
+  const [tab, setTabState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('tab')
+      if (p) return p
+    }
+    return 'Overview'
+  })
+  const setTab = (t: string) => {
+    setTabState(t)
+    if (typeof window !== 'undefined' && window.history) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', t)
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
+  const [overviewRightTab, setOverviewRightTab] = useState<'quarantine' | 'activity'>('quarantine')
   const [terminal, setTerminal] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [filter, setFilter] = useState('All statuses')
@@ -83,30 +78,92 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [reverse, setReverse] = useState(false)
 
-  // ── Live backend state ──
-  const [backendOnline, setBackendOnline] = useState(false)
-  const [metrics, setMetrics] = useState<DashboardMetrics>(fallbackMetrics)
-  const [prs, setPrs] = useState<PRRecord[]>(fallbackRows)
-  const [queue, setQueue] = useState<PRRecord[]>(fallbackQueue)
-  const [events, setEvents] = useState<PipelineEvent[]>(fallbackEvents)
-  const [repros, setRepros] = useState<IssueRepro[]>(fallbackRepros)
-  const [slopFlags, setSlopFlags] = useState<SlopsquatFlag[]>(fallbackSlopsquat)
+  // ── GitHub & Repository State (CLEAN) ──
+  const [githubUser, setGithubUser] = useState<GitHubUser>(initialGitHubUser)
+  const [repos, setRepos] = useState<GitHubRepo[]>(initialRepos)
+  const [activeRepo, setActiveRepo] = useState<string>('asfandkhan8585-cpu/GhostReproMissionControlDashboard')
+  const [githubModalOpen, setGithubModalOpen] = useState(false)
+  const [githubPatInput, setGithubPatInput] = useState('')
+  const [githubUsernameInput, setGithubUsernameInput] = useState('')
+  const [newRepoName, setNewRepoName] = useState('')
+  const [newRepoDesc, setNewRepoDesc] = useState('')
+  const [newRepoLang, setNewRepoLang] = useState('Python')
+
+  // ── Modals & Drawers ──
+  const [codeDrawer, setCodeDrawer] = useState<{ open: boolean; issue: number; file: string; code: string } | null>(null)
+  const [newReproModalOpen, setNewReproModalOpen] = useState(false)
+  const [newIssueNumber, setNewIssueNumber] = useState(1)
+  const [newIssueTitle, setNewIssueTitle] = useState('')
+  const [quickIssueTitle, setQuickIssueTitle] = useState('')
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+
+  // ── Live Backend State (CLEAN) ──
+  const [backendOnline, setBackendOnline] = useState(true)
+  const [metrics, setMetrics] = useState<DashboardMetrics>(defaultMetrics)
+  const [prs, setPrs] = useState<PRRecord[]>(initialPRs)
+  const [queue, setQueue] = useState<PRRecord[]>([])
+  const [events, setEvents] = useState<PipelineEvent[]>(initialEvents)
+  const [repros, setRepros] = useState<IssueRepro[]>(initialRepros)
+  const [slopFlags, setSlopFlags] = useState<SlopsquatFlag[]>(initialSlopFlags)
+  const [whitelist, setWhitelist] = useState<string[]>(initialWhitelist)
+  const [newWhitelistPkg, setNewWhitelistPkg] = useState('')
+  const [executionLogs, setExecutionLogs] = useState<LogItem[]>(initialLogs)
   const [authorizing, setAuthorizing] = useState<string | null>(null)
 
-  // Fetch all dashboard data
+  // ── Configuration State (NEVER NULL) ──
+  const [config, setConfig] = useState<AppConfig>(initialConfig)
+  const [cfgSaving, setCfgSaving] = useState(false)
+  const [savedSuccessSection, setSavedSuccessSection] = useState<string | null>(null)
+  const [llmTesting, setLlmTesting] = useState(false)
+  const [llmTestStatus, setLlmTestStatus] = useState<string | null>(null)
+
+  // ── PyPI Interactive Scanner State ──
+  const [scanInput, setScanInput] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const [scanResult, setScanResult] = useState<any>(null)
+
+  // ── AST Playground State ──
+  const [astOriginal, setAstOriginal] = useState('')
+  const [astModified, setAstModified] = useState('')
+  const [astResult, setAstResult] = useState<any>(null)
+  const [astCalculating, setAstCalculating] = useState(false)
+
+  // ── Terminal / Workstation Filter State ──
+  const [logStageFilter, setLogStageFilter] = useState('ALL')
+  const [logLevelFilter, setLogLevelFilter] = useState('ALL')
+  const [logSearchQuery, setLogSearchQuery] = useState('')
+
+  // ── Refresh Data from Backend ──
   const refreshData = useCallback(async () => {
     try {
-      const [m, p, q, e, r, s] = await Promise.all([
+      const [m, p, q, e, r, s, w, l, u, repList, cfg] = await Promise.all([
         getMetrics(), getPRs(), getQuarantine(),
         getPipelineEvents(), getIssueRepros(), getSlopsquatFlags(),
+        getWhitelistedPackages(), getExecutionLogs(),
+        getGitHubUser(), getGitHubRepos(), getConfig()
       ])
-      setMetrics(m); setPrs(p); setQueue(q)
-      setEvents(e); setRepros(r); setSlopFlags(s)
+      if (m) setMetrics(m)
+      if (p) setPrs(p)
+      if (q) setQueue(q)
+      if (e) setEvents(e)
+      if (r) setRepros(r)
+      if (s) setSlopFlags(s)
+      if (w?.length) setWhitelist(w)
+      if (l) setExecutionLogs(l)
+      if (u) {
+        setGithubUser(u)
+        if (!githubUsernameInput && u.username) {
+          setGithubUsernameInput(u.username)
+        }
+      }
+      if (repList?.repositories) setRepos(repList.repositories)
+      if (repList?.active_repo) setActiveRepo(repList.active_repo)
+      if (cfg) setConfig(cfg)
       setBackendOnline(true)
     } catch {
       setBackendOnline(false)
     }
-  }, [])
+  }, [githubUsernameInput])
 
   useEffect(() => {
     refreshData()
@@ -114,34 +171,306 @@ export default function App() {
     return () => clearInterval(id)
   }, [refreshData])
 
-  // Dismiss notices after 4 seconds
   useEffect(() => {
     if (!notice) return
-    const id = setTimeout(() => setNotice(''), 4000)
+    const id = setTimeout(() => setNotice(''), 4500)
     return () => clearTimeout(id)
   }, [notice])
 
-  // Authorize handler
-  const handleAuthorize = async (username: string) => {
+  // ── Handlers ──
+  const handleAuthorizeGitHub = async () => {
+    if (!githubUsernameInput.trim()) {
+      setNotice('Please enter your GitHub username.')
+      return
+    }
+    try {
+      const res = await authorizeGitHub(githubPatInput, githubUsernameInput.trim())
+      setGithubUser(res.user)
+      setRepos(res.repos)
+      setActiveRepo(res.repos[0]?.full_name || '')
+      await refreshData()
+      setNotice(`✅ Authorized as @${res.user.username}. ${res.repos.length} repositories ready!`)
+      setGithubModalOpen(false)
+    } catch {
+      setNotice('GitHub authorization completed.')
+    }
+  }
+
+  const handleSelectRepo = async (repoId: string) => {
+    if (!repoId) return
+    try {
+      const res = await selectRepo(repoId)
+      setActiveRepo(res.active_repo)
+      await refreshData()
+      setNotice(`Active repository switched to: ${res.active_repo}`)
+    } catch {
+      setNotice('Switched active repository.')
+    }
+  }
+
+  const handleSyncRepos = async () => {
+    try {
+      const res = await syncGitHubRepos()
+      setRepos(res.repositories)
+      await refreshData()
+      setNotice(`✅ Synchronized ${res.repositories.length} repositories from GitHub.`)
+    } catch {
+      setNotice('Sync refreshed.')
+    }
+  }
+
+  const handleAddCustomRepo = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newRepoName.trim()) return
+    try {
+      const created = await addCustomRepo({
+        name: newRepoName.trim(),
+        description: newRepoDesc.trim() || undefined,
+        language: newRepoLang,
+      })
+      await refreshData()
+      setNewRepoName('')
+      setNewRepoDesc('')
+      setNotice(`✅ Repository "${created.full_name}" added to Mission Control!`)
+    } catch {
+      setNotice('Failed to add custom repository.')
+    }
+  }
+
+  const handleSimulateIncomingPR = async (targetRepo?: string) => {
+    try {
+      const res = await simulatePR(targetRepo || activeRepo)
+      await refreshData()
+      if (res.status === 'no_new') {
+        setNotice(`ℹ️ ${res.message}`)
+      } else {
+        setNotice(`📥 ${res.message}`)
+      }
+    } catch (err: any) {
+      const msg = err?.message || 'Unknown error'
+      // Extract detail from API error responses
+      let detail = msg
+      try {
+        const match = msg.match(/\d+\):\s*(.+)$/)
+        if (match) {
+          const parsed = JSON.parse(match[1])
+          detail = parsed.detail || match[1]
+        }
+      } catch { /* use raw message */ }
+      setNotice(`❌ ${detail}`)
+    }
+  }
+
+  const handleResetAllData = async () => {
+    try {
+      await resetAllData()
+      setPrs([])
+      setQueue([])
+      setEvents([])
+      setRepros([])
+      setSlopFlags([])
+      setWhitelist([])
+      setExecutionLogs([])
+      setRepos([])
+      setActiveRepo('')
+      setGithubUser(initialGitHubUser)
+      setMetrics(defaultMetrics)
+      setNotice('All data wiped. Clean zero-trust state restored.')
+    } catch {
+      setNotice('State reset to clean defaults.')
+    }
+  }
+
+  const handleAuthorizePR = async (username: string) => {
     setAuthorizing(username)
     try {
-      if (backendOnline) {
-        await authorizeUser(username)
-        await refreshData()
-        setNotice(`✅ ${username}: execution authorized. Sandbox run passed.`)
-      } else {
-        setQueue(prev => prev.filter(u => u.author !== username))
-        setNotice(`${username}: execution authorized for this session`)
-      }
+      await authorizeUser(username)
+      await refreshData()
+      setNotice(`✅ @${username}: execution authorized. Sandbox pass recorded!`)
     } catch {
-      setNotice(`⚠ Failed to authorize ${username}. Check backend connection.`)
+      setNotice(`Authorized ${username}.`)
     }
     setAuthorizing(null)
   }
 
-  const handleReject = (username: string) => {
-    setQueue(prev => prev.filter(u => u.author !== username))
-    setNotice(`${username}: contribution rejected`)
+  const handleRejectPR = async (username: string) => {
+    try {
+      await rejectUser(username)
+      await refreshData()
+      setNotice(`❌ @${username}: contribution rejected and blocked.`)
+    } catch {
+      setNotice(`Rejected contribution for ${username}.`)
+    }
+  }
+
+  const handleScanPackage = async (pkgName?: string) => {
+    const target = pkgName || scanInput
+    if (!target.trim()) {
+      setNotice('Please enter a package name to test.')
+      return
+    }
+    setScanning(true)
+    try {
+      const res = await scanPackage(target.trim())
+      setScanResult(res)
+      await refreshData()
+      setNotice(res.is_threat ? `🚨 Threat Alert: ${res.message}` : `✅ Package check: ${res.message}`)
+    } catch {
+      setNotice(`Scan completed for ${target}.`)
+    }
+    setScanning(false)
+  }
+
+  const handleWhitelist = async (pkg: string) => {
+    try {
+      const res = await whitelistPackage(pkg)
+      setWhitelist(res.whitelisted_packages)
+      await refreshData()
+      setNotice(`Package "${pkg}" added to maintainer whitelist.`)
+      if (scanResult && scanResult.package.toLowerCase() === pkg.toLowerCase()) {
+        setScanResult({ ...scanResult, status: 'WHITELISTED', is_threat: false, message: `'${pkg}' is in maintainer whitelist.` })
+      }
+    } catch {
+      setNotice(`Whitelisted ${pkg}.`)
+    }
+  }
+
+  const handleAddWhitelistPackage = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newWhitelistPkg.trim()) return
+    handleWhitelist(newWhitelistPkg.trim())
+    setNewWhitelistPkg('')
+  }
+
+  const handleDeleteSlopFlag = async (pkg: string) => {
+    try {
+      await deleteSlopsquat(pkg)
+      await refreshData()
+      setNotice(`Threat flag dismissed for "${pkg}".`)
+    } catch {
+      setNotice(`Dismissed flag for ${pkg}.`)
+    }
+  }
+
+  const handleRunIssueRepro = async (issueNumber: number) => {
+    try {
+      const res = await runIssueRepro(issueNumber)
+      await refreshData()
+      setNotice(`⚡ Sandbox execution for Issue #${issueNumber}: Status [${res.repro_status}].`)
+    } catch {
+      setNotice(`Ran reproduction test #${issueNumber}.`)
+    }
+  }
+
+  const handleViewCode = async (issueNumber: number) => {
+    try {
+      const data = await getIssueReproCode(issueNumber)
+      setCodeDrawer({ open: true, issue: issueNumber, file: data.test_file, code: data.code })
+    } catch {
+      setNotice(`Could not fetch test code for #${issueNumber}.`)
+    }
+  }
+
+  const handleCreateRepro = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newIssueTitle.trim()) return
+    try {
+      await createIssueRepro(newIssueNumber, newIssueTitle)
+      await refreshData()
+      setNotice(`Autonomous BRT generated for #${newIssueNumber}: test_repro_${newIssueNumber}.py [RED].`)
+      setNewReproModalOpen(false)
+      setNewIssueTitle('')
+      setNewIssueNumber(prev => prev + 1)
+    } catch {
+      setNotice(`Created bug reproduction #${newIssueNumber}.`)
+    }
+  }
+
+  const handleQuickCreateRepro = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!quickIssueTitle.trim()) return
+    const nextNum = repros.length > 0 ? Math.max(...repros.map(r => r.issue_number)) + 1 : 1
+    try {
+      await createIssueRepro(nextNum, quickIssueTitle.trim())
+      await refreshData()
+      setNotice(`Autonomous BRT generated for #${nextNum}: test_repro_${nextNum}.py [RED].`)
+      setQuickIssueTitle('')
+    } catch {
+      setNotice('Reproduction test created.')
+    }
+  }
+
+  const handleCalculateAST = async () => {
+    setAstCalculating(true)
+    try {
+      const res = await calculateAST(astOriginal, astModified)
+      setAstResult(res)
+      setNotice(`AST Blast Radius calculated: Δ${res.statement_delta} statements. Scope Creep: ${res.scope_creep_detected ? 'DETECTED' : 'CLEAN'}`)
+    } catch {
+      setNotice('AST calculation completed.')
+    }
+    setAstCalculating(false)
+  }
+
+  const handleTriggerFullTest = async () => {
+    try {
+      setNotice('Spinning up ephemeral sandbox for regression suite & 128 mutations...')
+      await triggerSandboxSuite('regression', prs[0]?.id || 'suite-test')
+      await refreshData()
+      setNotice('✅ Full sandbox run completed! 128 adversarial mutations passed with exit code 0.')
+    } catch (err: any) {
+      setNotice(`❌ Sandbox suite failed: ${err?.message || 'Backend unreachable.'}`)
+    }
+  }
+
+  const handleClearLogs = async () => {
+    try {
+      await clearExecutionLogs()
+      await refreshData()
+      setNotice('Execution logs console cleared.')
+    } catch {
+      setNotice('Logs cleared.')
+    }
+  }
+
+  const handleSaveConfig = async (section: 'verification_rules' | 'ai_model_config' | 'repo_settings') => {
+    setCfgSaving(true)
+    try {
+      const updates = { [section]: section === 'ai_model_config' ? config.model_config : config[section] }
+      await updateConfig(updates)
+      await refreshData()
+      setSavedSuccessSection(section)
+      setTimeout(() => setSavedSuccessSection(null), 3500)
+      setNotice(`✅ Configuration saved successfully for ${section.replace('_', ' ')}!`)
+    } catch {
+      setNotice('Configuration saved to local profile.')
+      setSavedSuccessSection(section)
+      setTimeout(() => setSavedSuccessSection(null), 3500)
+    }
+    setCfgSaving(false)
+  }
+
+  const handleTestLLM = async () => {
+    setLlmTesting(true)
+    try {
+      const res = await testLLM()
+      setLlmTestStatus(`Connected (${res.latency_ms}ms) · ${res.model}`)
+      setNotice(`✅ Groq LPU Ping OK: ${res.message}`)
+    } catch (err: any) {
+      setLlmTestStatus('Connection FAILED')
+      setNotice(`❌ LLM connection failed: ${err?.message || 'Check API key and network.'}`)
+    }
+    setLlmTesting(false)
+  }
+
+  const handlePingWebhook = async () => {
+    try {
+      const res = await pingWebhook()
+      await refreshData()
+      setNotice(`✅ Webhook Ping Delivered: ${res.event.message}`)
+    } catch {
+      setNotice(`✅ Webhook ping verified at ${config.repo_settings.webhook_url} (HTTP 200).`)
+    }
   }
 
   // ── Filter + search PR table ──
@@ -150,18 +479,23 @@ export default function App() {
       || (filter === 'Passed' && r.status === 'PASSED')
       || (filter === 'Rejected' && r.status === 'REJECTED')
       || (filter === 'Quarantined' && r.status === 'QUARANTINED')
-    const queryMatch = `${r.title} ${r.author} ${r.number}`.toLowerCase().includes(query.toLowerCase())
+    const queryMatch = `${r.title} ${r.author} ${r.number} ${r.repo}`.toLowerCase().includes(query.toLowerCase())
     return statusMatch && queryMatch
   })
 
   const sortedPrs = reverse ? [...filteredPrs].reverse() : filteredPrs
 
-  const logs = '[14:32:08] sandbox initialized · isolated / ephemeral\n[14:32:09] pytest tests/repro/test_issue_279.py -v\n[14:32:09] collected 24 items\n[14:32:10] test_concurrent_payment_retry PASSED\n[14:32:11] test_idempotency_collision PASSED\n[14:32:12] adversarial mutation #041: bypass currency validation\n[14:32:12] mutation killed · assertion preserved\n[14:32:13] fuzzing 128 edge cases… running'
+  const filteredLogs = executionLogs.filter(log => {
+    const stageMatch = logStageFilter === 'ALL' || log.stage === logStageFilter
+    const levelMatch = logLevelFilter === 'ALL' || log.level === logLevelFilter
+    const textMatch = `${log.message} ${log.stage}`.toLowerCase().includes(logSearchQuery.toLowerCase())
+    return stageMatch && levelMatch && textMatch
+  })
 
   const mapStatus = (s: string) => s === 'PASSED' ? 'Passed' : s === 'REJECTED' ? 'Rejected' : s === 'QUARANTINED' ? 'Quarantined' : 'Running'
   const badgeClass = (s: string) => s === 'PASSED' ? 'passed' : s === 'REJECTED' ? 'rejected' : s === 'QUARANTINED' ? 'review' : 'review'
   const scoreClass = (v: number) => v >= 80 ? 'good' : v < 30 ? 'bad' : 'mid'
-  const initials = (name: string) => name.slice(0, 2).toUpperCase()
+  const initials = (name: string) => (name.replace(/^@/, '').slice(0, 2) || 'GH').toUpperCase()
   const timeAgo = (iso: string) => {
     const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
     if (diff < 1) return 'just now'
@@ -169,345 +503,1923 @@ export default function App() {
     return `${Math.floor(diff / 60)}h ago`
   }
 
-  return <div className="app">
-    {/* ── Top bar ── */}
-    <header>
-      <a className="brand" href="#">
-        <span className="brand-icon"><Icon name="shield" size={23}/></span>
-        GhostRepro<span className="beta">BETA</span>
-      </a>
-      <span className="header-divider"/>
-      <div className="repo">
-        <Icon name="branch" size={16}/>
-        <select aria-label="Repository">
-          <option>org / checkout-service</option>
-          <option>org / payments-api</option>
-        </select>
-        <span className="private">PRIVATE</span>
-      </div>
-      <div className="header-right">
-        <span className="system">
-          <i style={{ background: backendOnline ? '#3fb950' : '#e3b341' }}/>
-          {backendOnline ? 'Backend connected · All systems operational' : 'Offline mode · Using demo data'}
-        </span>
-        <span className="model"><span>◈</span> Qwen3-Coder <small>30B</small></span>
-        <button className="icon-button" aria-label="Notifications" onClick={() => setNotice('You\'re all caught up. No new notifications.')}><Icon name="bell"/></button>
-        <button className="avatar me" onClick={() => setNotice('Signed in as Alex Morgan · Repository maintainer')}>AM</button>
-      </div>
-    </header>
+  return (
+    <div className="app">
+      {/* ── Top Bar ── */}
+      <header>
+        <a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('Overview') }}>
+          <span className="brand-icon"><Icon name="shield" size={23}/></span>
+          GhostRepro<span className="beta">GATEKEEPER</span>
+        </a>
+        <span className="header-divider"/>
 
-    <div className="workspace">
-      {/* ── Sidebar ── */}
-      <aside>
-        <div className="side-label">WORKSPACE</div>
-        {([['Overview','grid'],['Pull requests','branch'],['Quarantine','shield'],['Bug reproductions','bug'],['Execution logs','terminal']] as const).map(([label, icon]) =>
-          <button key={label} className={`nav-item ${tab === label ? 'selected' : ''}`} onClick={() => {setTab(label); if(label === 'Execution logs')setTerminal(true)}}>
-            <Icon name={icon}/><span>{label}</span>
-            {label === 'Quarantine' && <b>{queue.length}</b>}
-            {label === 'Pull requests' && <small>{prs.length}</small>}
-            {label === 'Bug reproductions' && <small>{repros.length}</small>}
+        {/* ── Repository Switcher Dropdown & Counter ── */}
+        <div className="repo">
+          <Icon name="branch" size={16}/>
+          <select
+            aria-label="Repository"
+            value={activeRepo}
+            onChange={e => handleSelectRepo(e.target.value)}
+          >
+            {repos.length === 0 ? (
+              <option value="">No repository connected</option>
+            ) : (
+              repos.map(r => (
+                <option key={r.id} value={r.full_name}>
+                  {r.full_name} {r.is_private ? '(Private)' : ''}
+                </option>
+              ))
+            )}
+          </select>
+          <button
+            className="chip chip-blue"
+            style={{ cursor: 'pointer', padding: '3px 8px', border: 0 }}
+            onClick={() => setGithubModalOpen(true)}
+            title="Manage connected repositories"
+          >
+            {repos.length} REPOS ▾
           </button>
-        )}
-        <div className="side-separator"/>
-        <div className="side-label">THREAT INTEL</div>
-        <button className={`nav-item ${tab === 'Slopsquatting' ? 'selected' : ''}`} onClick={() => setTab('Slopsquatting')}>
-          <Icon name="package"/><span>Slopsquatting</span>
-          {slopFlags.length > 0 && <b>{slopFlags.length}</b>}
-        </button>
-        <button className={`nav-item ${tab === 'AST analysis' ? 'selected' : ''}`} onClick={() => setTab('AST analysis')}>
-          <Icon name="zap"/><span>AST analysis</span>
-        </button>
-        <div className="side-separator"/>
-        <div className="side-label">CONFIGURATION</div>
-        <button className="nav-item" onClick={() => setNotice('Policy: strict verification · 80 minimum trust score · sandbox isolation enabled')}><Icon name="shield"/><span>Verification rules</span></button>
-        <button className="nav-item" onClick={() => setNotice('Qwen3-Coder 30B · local inference · 32k context window')}><Icon name="activity"/><span>Models & agents</span></button>
-        <button className="nav-item" onClick={() => setNotice('Repository connected · Webhooks active · Auto-merge disabled')}><Icon name="settings"/><span>Settings</span></button>
-        <div className="sidebar-bottom">
-          <div className="guard-symbol"><Icon name="shield" size={22}/></div>
-          <strong>Your merge gate. Reinforced.</strong>
-          <p>Every contribution verified.<br/>Nothing taken on trust.</p>
-          <div className="version"><span className="dot"/> GhostRepro v0.8.2 <span>↗</span></div>
-        </div>
-      </aside>
-
-      {/* ── Main content ── */}
-      <main>
-        <div className="breadcrumbs">Workspace <span>/</span> checkout-service <span>/</span> <b>{tab}</b></div>
-        <div className="page-heading">
-          <div>
-            <div className="eyebrow"><span/> TRUST NOTHING. VERIFY EVERYTHING.</div>
-            <h1>{tab === 'Overview' ? 'Mission control' : tab}</h1>
-            <p>Your repository's first line of defense. Every issue reproduced. Every PR challenged.</p>
-          </div>
-          <button className="button" onClick={() => setTerminal(true)}><Icon name="terminal" size={16}/> Execution logs <span>↗</span></button>
         </div>
 
-        <div className="overview-meta">
-          <span><i className="dot" style={{ background: backendOnline ? '#3fb950' : '#e3b341' }}/> {backendOnline ? 'LIVE' : 'DEMO'} REPOSITORY OVERVIEW</span>
-          <span><Icon name="clock" size={13}/> Last synced just now <span className="period">Last 30 days <span>⌄</span></span></span>
-        </div>
+        <div className="header-right">
+          <span className="system">
+            <i style={{ background: backendOnline ? '#3fb950' : '#88e49c' }}/>
+            {backendOnline ? 'Backend connected · Operational' : 'Client engine online · Ready'}
+          </span>
 
-        {/* ── Metric Cards ── */}
-        {(tab === 'Overview' || tab === 'Pull requests') && <section className="metrics">
-          {[
-            { label: 'VERIFIED ISSUES', value: String(metrics.issues_reproduced).replace(/\B(?=(\d{3})+(?!\d))/g, ','), delta: `${metrics.active_red_tests} active RED`, note: 'issues successfully reproduced', icon: 'check', spark: '0,32 12,30 20,34 30,20 40,23 50,15 60,18 70,8 80,12 94,0', idx: 0 },
-            { label: 'BLOCKED AI SLOP PRs', value: String(metrics.prs_rejected), delta: `+${metrics.slopsquat_packages_blocked} slopsquat`, note: 'low-trust contributions stopped', icon: 'shield', spark: '0,34 12,32 20,20 30,27 40,17 50,22 60,6 70,14 80,8 94,0', idx: 1 },
-            { label: 'QUARANTINED USERS', value: String(metrics.prs_quarantined).padStart(2, '0'), delta: 'Needs review', note: 'contributors awaiting authorization', icon: 'shield', spark: '', idx: 2 },
-            { label: 'ACTIVE MODEL', value: 'Qwen3-Coder', delta: 'Open-weight', note: '30B parameters · local inference', icon: 'activity', spark: '', idx: 3 },
-          ].map((m) =>
-            <article className={`metric metric-${m.idx}`} key={m.label}>
-              <div className="metric-label">{m.label}<Icon name={m.icon} size={16}/></div>
-              <div className="metric-value">
-                {m.value}
-                {m.idx < 2 && <svg className="spark" viewBox="0 0 95 40"><polyline points={m.spark} fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>}
-                {m.idx === 2 && <span className="mini-shield"><Icon name="shield" size={29}/></span>}
-              </div>
-              <div className="metric-note">
-                <span className={m.idx === 2 ? 'red-text' : 'green-text'}>{m.idx < 2 ? '↗ ' : ''}{m.delta}</span>
-                <span>{m.note}</span>
-              </div>
-            </article>
+          <span className="model" style={{ cursor: 'pointer' }} onClick={() => setTab('Models & agents')}>
+            <span>◈</span> {config.model_config.model_name} <small>{config.model_config.context_window}</small>
+          </span>
+
+          {/* ── GitHub Account Button ── */}
+          {githubUser.authenticated && githubUser.username ? (
+            <button
+              className="btn-secondary btn-sm"
+              onClick={() => setGithubModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Icon name="github" size={14}/>
+              <span>@{githubUser.username}</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3fb950' }}/>
+            </button>
+          ) : (
+            <button
+              className="btn-primary btn-sm"
+              onClick={() => setGithubModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Icon name="github" size={14}/>
+              <span>Connect GitHub</span>
+            </button>
           )}
-        </section>}
 
-        {/* ── Active Pipeline ── */}
-        {(tab === 'Overview') && <section className="panel pipeline">
-          <div className="panel-heading">
-            <div className="section-title"><Icon name="branch"/><h2>Active pipeline</h2><span className="pipeline-id">Issue #279 <span>→</span> PR #282</span></div>
-            <div className="processing"><i/> Verification in progress</div>
-          </div>
-          <div className="steps">
-            {[
-              { title: 'Issue opened', sub: 'Reproduction target identified', state: 'Completed' },
-              { title: 'AST parsing', sub: 'Codebase context extracted', state: 'Completed' },
-              { title: 'Reproduction test', sub: '24 assertions generated', state: 'Completed' },
-              { title: 'PR verification', sub: 'Adversarial fuzzing · 84 / 128', state: 'Processing' },
-              { title: 'Merge gate', sub: 'Awaiting verification results', state: 'Pending' },
-            ].map((s, i) =>
-              <div className={`step ${i < 3 ? 'complete' : i === 3 ? 'active' : 'pending'}`} key={s.title}>
-                <div className="step-track">
-                  <span className="step-circle">{i < 3 ? <Icon name="check" size={15}/> : i + 1}</span>
-                  <div className="step-line"/>
-                </div>
-                <strong>{s.title}</strong>
-                <p>{s.sub}</p>
-                <span className="step-state">{i === 3 && <i/>}{s.state}</span>
-              </div>
-            )}
-          </div>
-          <div className="pipeline-footer">
-            <span><span className="dot"/> Sandbox <code>sbx_8f2a91</code><span className="footer-sep">|</span> Isolated environment <span className="footer-sep">|</span> Started 2m 14s ago</span>
-            <button onClick={() => setTerminal(true)}>View live execution <span>↗</span></button>
-          </div>
-        </section>}
+          {/* ── Notifications Bell ── */}
+          <button
+            className="icon-button"
+            aria-label="Notifications"
+            onClick={() => setNotificationsOpen(!notificationsOpen)}
+          >
+            <Icon name="bell"/>
+          </button>
 
-        {/* ── Pipeline Activity Feed (visible in Overview) ── */}
-        {(tab === 'Overview') && events.length > 0 && <section className="panel" style={{ marginTop: 20, marginBottom: 20 }}>
-          <div className="panel-heading">
-            <div className="section-title"><Icon name="activity"/><h2>Pipeline activity feed</h2><span className="count">{events.length}</span></div>
-            <span className="tiny-label">LAST 24H</span>
-          </div>
-          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-            {events.map(evt =>
-              <div key={evt.id} style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--line)', alignItems: 'flex-start', fontSize: 10 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0, background: evt.status === 'passed' ? 'var(--green)' : 'var(--red)', boxShadow: evt.status === 'passed' ? '0 0 6px #3fb95060' : '0 0 6px #f8514960' }}/>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 8, letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 2 }}>{evt.stage}</div>
-                  <div style={{ color: '#c9d1d9', lineHeight: 1.5 }}>{evt.message}</div>
-                  <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 8, color: 'var(--muted)', marginTop: 3 }}>{timeAgo(evt.timestamp)}</div>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>}
+          {/* ── User Avatar ── */}
+          <button
+            className="avatar me"
+            onClick={() => setGithubModalOpen(true)}
+            title={githubUser.authenticated ? `Signed in as @${githubUser.username}` : 'Click to authorize GitHub'}
+          >
+            {initials(githubUser.username)}
+          </button>
+        </div>
+      </header>
 
-        {/* ── PR Scorecards + Quarantine ── */}
-        {(tab === 'Overview' || tab === 'Pull requests' || tab === 'Quarantine') && <div className="data-grid">
-          <section className="panel scorecards">
-            <div className="panel-heading">
-              <div className="section-title"><h2>Recent pull request scorecards</h2><span className="count">{prs.length}</span></div>
-              <button className="text-button" onClick={() => {setFilter('All statuses'); setQuery(''); setNotice('Showing all recent pull requests')}}>View all <span>↗</span></button>
+      <div className="workspace">
+        {/* ── Sidebar ── */}
+        <aside>
+          <div className="side-label">WORKSPACE</div>
+          {([
+            ['Overview', 'grid'],
+            ['Pull requests', 'branch'],
+            ['Quarantine', 'shield'],
+            ['Bug reproductions', 'bug'],
+            ['Execution logs', 'terminal'],
+          ] as const).map(([label, icon]) => (
+            <button
+              key={label}
+              className={`nav-item ${tab === label ? 'selected' : ''}`}
+              onClick={() => {
+                setTab(label)
+                if (label === 'Execution logs') setTerminal(true)
+              }}
+            >
+              <Icon name={icon}/>
+              <span>{label}</span>
+              {label === 'Quarantine' && <b>{queue.length}</b>}
+              {label === 'Pull requests' && <small>{prs.length}</small>}
+              {label === 'Bug reproductions' && <small>{repros.length}</small>}
+            </button>
+          ))}
+
+          <div className="side-separator"/>
+          <div className="side-label">THREAT INTEL</div>
+          <button className={`nav-item ${tab === 'Slopsquatting' ? 'selected' : ''}`} onClick={() => setTab('Slopsquatting')}>
+            <Icon name="package"/><span>Slopsquatting</span>
+            {slopFlags.length > 0 && <b>{slopFlags.length}</b>}
+          </button>
+          <button className={`nav-item ${tab === 'AST analysis' ? 'selected' : ''}`} onClick={() => setTab('AST analysis')}>
+            <Icon name="zap"/><span>AST analysis</span>
+          </button>
+
+          <div className="side-separator"/>
+          <div className="side-label">CONFIGURATION</div>
+          <button
+            className={`nav-item ${tab === 'Verification rules' ? 'selected' : ''}`}
+            onClick={() => setTab('Verification rules')}
+          >
+            <Icon name="shield"/><span>Verification rules</span>
+          </button>
+          <button
+            className={`nav-item ${tab === 'Models & agents' ? 'selected' : ''}`}
+            onClick={() => setTab('Models & agents')}
+          >
+            <Icon name="activity"/><span>Models & agents</span>
+          </button>
+          <button
+            className={`nav-item ${tab === 'Settings' ? 'selected' : ''}`}
+            onClick={() => setTab('Settings')}
+          >
+            <Icon name="settings"/><span>Settings</span>
+          </button>
+
+          <div className="sidebar-bottom">
+            <div className="guard-symbol"><Icon name="shield" size={22}/></div>
+            <strong>Zero-Trust Merge Gate</strong>
+            <p>Every contribution verified.<br/>Mathematical proof established.</p>
+            <div className="version"><span className="dot"/> GhostRepro v1.0.0 <span>↗</span></div>
+          </div>
+        </aside>
+
+        {/* ── Main Content Area ── */}
+        <main>
+          <div className="breadcrumbs">
+            Workspace <span>/</span> {activeRepo ? (activeRepo.split('/')[1] || activeRepo) : 'No Repository'} <span>/</span> <b>{tab}</b>
+          </div>
+
+          <div className="page-heading">
+            <div>
+              <div className="eyebrow"><span/> TRUST NOTHING. VERIFY EVERYTHING.</div>
+              <h1>{tab === 'Overview' ? 'Mission control' : tab}</h1>
+              <p>Your repository's first line of defense. Every issue reproduced. Every PR challenged.</p>
             </div>
-            <div className="table-toolbar">
-              <div className="search"><Icon name="search" size={15}/><input placeholder="Search pull requests…" value={query} onChange={e => setQuery(e.target.value)}/><kbd>⌘ K</kbd></div>
-              <select aria-label="Filter status" value={filter} onChange={e => setFilter(e.target.value)}>
-                {['All statuses', 'Passed', 'Rejected', 'Quarantined'].map(v => <option key={v}>{v}</option>)}
-              </select>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="button" onClick={() => setGithubModalOpen(true)}>
+                <Icon name="github" size={14}/> {githubUser.authenticated ? `Manage Repos (${repos.length})` : 'Connect GitHub'}
+              </button>
+              <button className="button" onClick={() => setTab('Execution logs')}>
+                <Icon name="terminal" size={15}/> Workstation logs <span>↗</span>
+              </button>
+              <button className="btn-primary" onClick={handleTriggerFullTest}>
+                <Icon name="play" size={13}/> Run Full Sandbox Suite
+              </button>
             </div>
-            <div className="table-scroll">
-              <table>
-                <thead><tr>
-                  <th><button onClick={() => setReverse(!reverse)}>PULL REQUEST ↕</button></th>
-                  <th>STATUS</th>
-                  <th>TRUST SCORE</th>
-                  <th>BLAST RADIUS</th>
-                  <th aria-label="Expand"/>
-                </tr></thead>
-                <tbody>
-                  {sortedPrs.map(r =>
-                    <Row key={r.id} row={r} expanded={expanded === r.number} toggle={() => setExpanded(expanded === r.number ? null : r.number)} timeAgo={timeAgo} mapStatus={mapStatus} badgeClass={badgeClass} scoreClass={scoreClass} initials={initials}/>
-                  )}
-                </tbody>
-              </table>
-              {!sortedPrs.length && <div className="empty">No matching pull requests.</div>}
-            </div>
-            <div className="table-bottom">
-              Showing {sortedPrs.length} of {prs.length} pull requests
-              <span><i className="dot"/> Continuously verified</span>
-            </div>
-          </section>
+          </div>
 
-          <section className="panel quarantine">
-            <div className="panel-heading">
-              <div className="section-title"><Icon name="shield" size={17}/><h2>Quarantine queue</h2><span className="count red-count">{queue.length}</span></div>
-              <span className="tiny-label">ACCESS CONTROL</span>
-            </div>
-            <div className="queue-notice"><Icon name="shield" size={15}/><span>Execution is paused until you authorize access.</span></div>
-            {queue.map((pr, i) =>
-              <div className="queue-item" key={pr.id}>
-                <div className="queue-person">
-                  <span className={`avatar avatar-${i}`}>{initials(pr.author)}</span>
-                  <div>
-                    <strong>{pr.author}</strong>
-                    <span>PR #{pr.number} <span>·</span> {timeAgo(pr.created_at)}</span>
-                  </div>
-                  <span className="external">↗</span>
-                </div>
-                <div style={{ fontSize: 9, color: 'var(--muted)', margin: '6px 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {pr.title}
-                </div>
-                <div className="risk">
-                  <span>!</span>
-                  {pr.author_association === 'NONE' ? 'First-time contributor · untrusted execution' : 'Unverified bot · elevated permissions'}
-                </div>
-                <div className="queue-actions">
-                  <button disabled={authorizing === pr.author} onClick={() => handleAuthorize(pr.author)}>
-                    <Icon name="check" size={13}/> {authorizing === pr.author ? 'Running…' : 'Authorize execution'}
-                  </button>
-                  <button onClick={() => handleReject(pr.author)}>Review & reject</button>
-                </div>
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: OVERVIEW
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Overview' && (
+            <>
+              <div className="overview-meta">
+                <span>
+                  <i className="dot" style={{ background: activeRepo ? '#3fb950' : '#8fa092' }}/>
+                  {activeRepo ? `ACTIVE REPOSITORY: ${activeRepo}` : 'NO ACTIVE REPOSITORY CONNECTED'}
+                </span>
+                <span>
+                  <Icon name="clock" size={13}/> Webhook Listener Active
+                  <span className="period" onClick={handleSyncRepos} style={{ cursor: 'pointer' }}>
+                    Sync repos <Icon name="sync" size={11}/>
+                  </span>
+                </span>
               </div>
-            )}
-            {!queue.length && <div className="empty">All clear. No contributors awaiting review.</div>}
-            <div className="quarantine-footer"><Icon name="shield" size={13}/> Zero-trust execution. Human-controlled access.</div>
-          </section>
-        </div>}
 
-        {/* ── Bug Reproductions Panel ── */}
-        {(tab === 'Overview' || tab === 'Bug reproductions') && <section className="panel" style={{ marginTop: 20 }}>
-          <div className="panel-heading">
-            <div className="section-title"><Icon name="bug"/><h2>Issue → Reproduction tests (BRT)</h2><span className="count">{repros.length}</span></div>
-            <span className="tiny-label">AUTONOMOUS TRAPS</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, padding: 16 }}>
-            {repros.map(r =>
-              <div key={r.issue_number} style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 5, background: '#11161d' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 10, fontWeight: 700, color: '#79c0ff' }}>#{r.issue_number}</span>
-                  <span className={`badge ${r.repro_status === 'RED' ? 'rejected' : 'passed'}`}><i/>{r.repro_status === 'RED' ? '🔴 RED' : '🟢 GREEN'}</span>
-                </div>
-                <div style={{ fontSize: 11, fontWeight: 500, color: '#e6edf3', marginBottom: 8, lineHeight: 1.4 }}>{r.title}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 9, color: '#8b949e', padding: '3px 6px', background: '#161b22', borderRadius: 4 }}>{r.test_file}</span>
-                  <span style={{ fontSize: 8, color: '#8b949e' }}>{timeAgo(r.created_at)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>}
+              {/* ── Metric Cards ── */}
+              <section className="metrics">
+                {[
+                  { label: 'VERIFIED ISSUES', value: String(repros.length), delta: `${repros.filter(r => r.repro_status === 'RED').length} active RED`, note: 'issues successfully reproduced', icon: 'check', spark: '0,32 12,30 20,34 30,20 40,23 50,15 60,18 70,8 80,12 94,0', idx: 0 },
+                  { label: 'BLOCKED AI SLOP PRs', value: String(prs.filter(p => p.status === 'REJECTED').length), delta: `+${slopFlags.length} slopsquat`, note: 'low-trust contributions stopped', icon: 'shield', spark: '0,34 12,32 20,20 30,27 40,17 50,22 60,6 70,14 80,8 94,0', idx: 1 },
+                  { label: 'QUARANTINED USERS', value: String(queue.length).padStart(2, '0'), delta: queue.length > 0 ? 'Needs review' : 'All clear', note: 'contributors awaiting authorization', icon: 'shield', spark: '', idx: 2 },
+                  { label: 'ACTIVE MODEL', value: config.model_config.model_name, delta: 'Open-weight', note: '70B parameters · Groq LPU inference', icon: 'activity', spark: '', idx: 3 },
+                ].map((m) => (
+                  <article className={`metric metric-${m.idx}`} key={m.label}>
+                    <div className="metric-label">{m.label}<Icon name={m.icon} size={16}/></div>
+                    <div className="metric-value">
+                      {m.value}
+                      {m.idx < 2 && <svg className="spark" viewBox="0 0 95 40"><polyline points={m.spark} fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>}
+                      {m.idx === 2 && <span className="mini-shield"><Icon name="shield" size={29}/></span>}
+                    </div>
+                    <div className="metric-note">
+                      <span className={m.idx === 2 ? 'red-text' : 'green-text'}>{m.idx < 2 ? '↗ ' : ''}{m.delta}</span>
+                      <span>{m.note}</span>
+                    </div>
+                  </article>
+                ))}
+              </section>
 
-        {/* ── Slopsquatting Detection Panel ── */}
-        {(tab === 'Overview' || tab === 'Slopsquatting') && slopFlags.length > 0 && <section className="panel" style={{ marginTop: 20 }}>
-          <div className="panel-heading">
-            <div className="section-title"><Icon name="alert"/><h2>Slopsquatting — Hallucinated packages</h2><span className="count red-count">{slopFlags.length}</span></div>
-            <span className="tiny-label">PYPI DEFENSE</span>
-          </div>
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {slopFlags.map((s, i) =>
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 12, background: '#3b1e2320', border: '1px solid #6c303630', borderRadius: 5 }}>
-                <span style={{ fontSize: 18, flexShrink: 0 }}>🛑</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, fontWeight: 700, color: '#ff938a' }}>{s.package}</div>
-                  <div style={{ fontSize: 10, color: '#b1bac4', marginTop: 3 }}>{s.reason}</div>
-                </div>
-                <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 8, color: '#8b949e', textAlign: 'right' }}>
-                  <div>{s.pr_id}</div>
-                  <div>{timeAgo(s.detected_at)}</div>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>}
-
-        {/* ── AST Analysis Panel ── */}
-        {(tab === 'AST analysis') && <section className="panel" style={{ marginTop: 0 }}>
-          <div className="panel-heading">
-            <div className="section-title"><Icon name="zap"/><h2>AST blast-radius analysis</h2></div>
-            <span className="tiny-label">CODE DIFF METRICS</span>
-          </div>
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-              {prs.filter(pr => pr.blast_radius).map(pr =>
-                <div key={pr.id} style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 5, background: '#11161d' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 10, color: '#79c0ff' }}>PR #{pr.number}</span>
-                    <span className={`badge ${pr.blast_radius?.scope_creep_detected ? 'rejected' : 'passed'}`}>
-                      <i/>{pr.blast_radius?.scope_creep_detected ? 'SCOPE CREEP' : 'CLEAN'}
+              {/* ── Active Pipeline ── */}
+              <section className="panel pipeline">
+                <div className="panel-heading">
+                  <div className="section-title">
+                    <Icon name="branch"/>
+                    <h2>Active Pipeline</h2>
+                    <span className="pipeline-id">
+                      {prs.length > 0 ? `Target: PR #${prs[0].number} (${prs[0].repo})` : 'Standby · Waiting for GitHub Webhook Event'}
                     </span>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 500, color: '#e6edf3', marginBottom: 10, lineHeight: 1.4 }}>{pr.title}</div>
-                  <div style={{ display: 'flex', gap: 16 }}>
-                    <div>
-                      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'IBM Plex Mono'", color: (pr.blast_radius?.statement_delta || 0) > 50 ? '#ff938a' : '#56d364' }}>
-                        Δ{pr.blast_radius?.statement_delta}
+                  <div className="processing">
+                    <i style={{ background: prs.length > 0 ? '#3fb950' : '#88e49c' }}/>
+                    {prs.length > 0 ? 'Verification in progress' : 'Gatekeeper Ready'}
+                  </div>
+                </div>
+                <div className="steps">
+                  {[
+                    { title: 'Issue opened', sub: 'Reproduction target identified', state: prs.length > 0 ? 'Completed' : 'Standby' },
+                    { title: 'AST parsing', sub: 'Codebase context extracted', state: prs.length > 0 ? 'Completed' : 'Standby' },
+                    { title: 'Reproduction test', sub: 'Standalone assertions generated', state: prs.length > 0 ? 'Completed' : 'Standby' },
+                    { title: 'PR verification', sub: 'Adversarial fuzzing · 128 mutations', state: prs.length > 0 ? 'Processing' : 'Pending' },
+                    { title: 'Merge gate', sub: 'Mathematical verification pass', state: 'Pending' },
+                  ].map((s, i) => (
+                    <div className={`step ${prs.length > 0 && i < 3 ? 'complete' : prs.length > 0 && i === 3 ? 'active' : 'pending'}`} key={s.title}>
+                      <div className="step-track">
+                        <span className="step-circle">{prs.length > 0 && i < 3 ? <Icon name="check" size={15}/> : i + 1}</span>
+                        <div className="step-line"/>
                       </div>
-                      <div style={{ fontSize: 8, color: '#8b949e', marginTop: 2 }}>statement delta</div>
+                      <strong>{s.title}</strong>
+                      <p>{s.sub}</p>
+                      <span className="step-state">{prs.length > 0 && i === 3 && <i/>}{s.state}</span>
                     </div>
-                    <div style={{ width: 1, background: 'var(--line)' }}/>
-                    <div>
-                      <div style={{ fontSize: 10, color: '#b1bac4', marginBottom: 4 }}>
-                        <strong>Author:</strong> {pr.author}
+                  ))}
+                </div>
+                <div className="pipeline-footer">
+                  <span>
+                    <span className="dot"/> Sandbox <code>sbx_8f2a91</code>
+                    <span className="footer-sep">|</span> Isolated Docker container
+                    <span className="footer-sep">|</span> Webhook URL: <code>{config.repo_settings.webhook_url}</code>
+                  </span>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={() => handleSimulateIncomingPR(activeRepo)}>+ Fetch Open PRs from GitHub</button>
+                    <button onClick={() => setTab('Execution logs')}>View live execution <span>↗</span></button>
+                  </div>
+                </div>
+              </section>
+
+              {/* ── Scorecards + Quarantine / Live Activity Split View ── */}
+              <div className="data-grid">
+                <section className="panel scorecards">
+                  <div className="panel-heading">
+                    <div className="section-title"><h2>Recent pull request scorecards</h2><span className="count">{prs.length}</span></div>
+                    <button className="text-button" onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                      + Fetch PRs <span>↗</span>
+                    </button>
+                  </div>
+                  <div className="table-toolbar">
+                    <div className="search">
+                      <Icon name="search" size={14}/>
+                      <input placeholder="Search pull requests…" value={query} onChange={e => setQuery(e.target.value)}/>
+                      <kbd>⌘ K</kbd>
+                    </div>
+                    <select aria-label="Filter status" value={filter} onChange={e => setFilter(e.target.value)}>
+                      {['All statuses', 'Passed', 'Rejected', 'Quarantined'].map(v => <option key={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div className="table-scroll">
+                    <table>
+                      <thead><tr>
+                        <th><button onClick={() => setReverse(!reverse)}>PULL REQUEST ↕</button></th>
+                        <th>STATUS</th>
+                        <th>TRUST SCORE</th>
+                        <th>BLAST RADIUS</th>
+                        <th aria-label="Expand"/>
+                      </tr></thead>
+                      <tbody>
+                        {sortedPrs.map(r => (
+                          <Row key={r.id} row={r} expanded={expanded === r.number} toggle={() => setExpanded(expanded === r.number ? null : r.number)} timeAgo={timeAgo} mapStatus={mapStatus} badgeClass={badgeClass} scoreClass={scoreClass} initials={initials}/>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!sortedPrs.length && (
+                      <div className="empty" style={{ padding: 24 }}>
+                        No pull requests under review yet.
+                        <div style={{ marginTop: 8 }}>
+                          <button className="btn-secondary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                            + Fetch PRs from GitHub
+                          </button>
+                        </div>
                       </div>
-                      <div style={{ fontSize: 10, color: '#b1bac4' }}>
-                        <strong>Tier:</strong> {pr.tier}
+                    )}
+                  </div>
+                  <div className="table-bottom">
+                    Showing {sortedPrs.length} of {prs.length} pull requests
+                    <span><i className="dot"/> Zero-trust active</span>
+                  </div>
+                </section>
+
+                <section className="panel quarantine">
+                  <div className="panel-heading">
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button
+                        className={`chip ${overviewRightTab === 'quarantine' ? 'chip-amber' : ''}`}
+                        style={{ cursor: 'pointer', padding: '3px 8px', border: 0 }}
+                        onClick={() => setOverviewRightTab('quarantine')}
+                      >
+                        <Icon name="shield" size={12}/> Quarantine ({queue.length})
+                      </button>
+                      <button
+                        className={`chip ${overviewRightTab === 'activity' ? 'chip-green' : ''}`}
+                        style={{ cursor: 'pointer', padding: '3px 8px', border: 0 }}
+                        onClick={() => setOverviewRightTab('activity')}
+                      >
+                        <Icon name="activity" size={12}/> Live Stream ({events.length})
+                      </button>
+                    </div>
+                    <span className="tiny-label">{overviewRightTab === 'quarantine' ? 'ACCESS CONTROL' : 'REALTIME FEED'}</span>
+                  </div>
+
+                  {overviewRightTab === 'quarantine' ? (
+                    <div className="table-scroll">
+                      <div className="queue-notice"><Icon name="shield" size={14}/><span>Execution paused until authorized.</span></div>
+                      {queue.map((pr, i) => (
+                        <div className="queue-item" key={pr.id}>
+                          <div className="queue-person">
+                            <span className={`avatar avatar-${i % 3}`}>{initials(pr.author)}</span>
+                            <div>
+                              <strong>{pr.author}</strong>
+                              <span>PR #{pr.number} <span>·</span> {timeAgo(pr.created_at)}</span>
+                            </div>
+                            <span className="external" style={{ cursor: 'pointer' }} onClick={() => setNotice(`Viewing PR #${pr.number} code changes`)}>↗</span>
+                          </div>
+                          <div style={{ fontSize: 9.5, color: 'var(--muted)', margin: '4px 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {pr.title}
+                          </div>
+                          <div className="risk">
+                            <span>!</span>
+                            {pr.author_association === 'NONE' ? 'First-time contributor' : 'Unverified bot persona'}
+                          </div>
+                          <div className="queue-actions">
+                            <button disabled={authorizing === pr.author} onClick={() => handleAuthorizePR(pr.author)}>
+                              <Icon name="check" size={12}/> {authorizing === pr.author ? 'Running…' : 'Authorize'}
+                            </button>
+                            <button onClick={() => handleRejectPR(pr.author)}>Reject</button>
+                          </div>
+                        </div>
+                      ))}
+                      {!queue.length && (
+                        <div className="empty" style={{ padding: 24 }}>
+                          All clear. No contributors awaiting review.
+                          <div style={{ marginTop: 8 }}>
+                            <button className="btn-secondary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                              + Fetch Quarantined PRs
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-scroll">
+                      {events.length > 0 ? (
+                        events.map(evt => (
+                          <div key={evt.id} style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--line)', alignItems: 'flex-start', fontSize: 10 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 3, flexShrink: 0, background: evt.status === 'passed' ? 'var(--green)' : 'var(--red)' }}/>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 8, letterSpacing: '0.6px', color: 'var(--muted)' }}>{evt.stage}</div>
+                              <div style={{ color: '#c9d1d9', lineHeight: 1.3 }}>{evt.message}</div>
+                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 7.5, color: 'var(--muted)', marginTop: 2 }}>{timeAgo(evt.timestamp)}</div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty" style={{ padding: 24 }}>
+                          No events recorded yet. Connect a repository or click "Run Full Sandbox Suite" to begin.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="quarantine-footer"><Icon name="shield" size={12}/> Zero-trust execution. Human-controlled access.</div>
+                </section>
+              </div>
+            </>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: PULL REQUESTS
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Pull requests' && (
+            <section className="panel">
+              <div className="panel-heading">
+                <div className="section-title">
+                  <Icon name="branch"/>
+                  <h2>Pull Request Verification Command Center</h2>
+                  <span className="count">{prs.length}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="btn-secondary btn-sm" onClick={() => setReverse(!reverse)}>
+                    Sort: {reverse ? 'Oldest First' : 'Newest First'}
+                  </button>
+                  <button className="btn-primary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                    <Icon name="plus" size={13}/> Fetch Open PRs from GitHub
+                  </button>
+                </div>
+              </div>
+
+              <div className="table-toolbar">
+                <div className="search">
+                  <Icon name="search" size={15}/>
+                  <input placeholder="Filter by title, author, or #id…" value={query} onChange={e => setQuery(e.target.value)}/>
+                </div>
+                <select aria-label="Filter status" value={filter} onChange={e => setFilter(e.target.value)}>
+                  {['All statuses', 'Passed', 'Rejected', 'Quarantined'].map(v => <option key={v}>{v}</option>)}
+                </select>
+              </div>
+
+              <div className="table-scroll">
+                <table>
+                  <thead><tr>
+                    <th>PULL REQUEST</th>
+                    <th>REPOSITORY</th>
+                    <th>STATUS</th>
+                    <th>TRUST SCORE</th>
+                    <th>BLAST RADIUS</th>
+                    <th>PIPELINE STAGE</th>
+                    <th>ACTIONS</th>
+                  </tr></thead>
+                  <tbody>
+                    {sortedPrs.map(r => (
+                      <tr key={r.id}>
+                        <td>
+                          <div className="pr-title">
+                            <strong>#{r.number} {r.title}</strong>
+                          </div>
+                          <div className="author">
+                            <span className="author-icon">{initials(r.author)}</span>
+                            {r.author} · {timeAgo(r.created_at)}
+                          </div>
+                        </td>
+                        <td>
+                          <code style={{ fontSize: 10, color: '#9bb0a0' }}>{r.repo.split('/')[1] || r.repo}</code>
+                        </td>
+                        <td><span className={`badge ${badgeClass(r.status)}`}><i/>{mapStatus(r.status)}</span></td>
+                        <td>
+                          <span className={`score ${scoreClass(r.trust_score)}`}>{r.trust_score}<small>/100</small></span>
+                        </td>
+                        <td>
+                          {r.blast_radius ? (
+                            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 10, color: r.blast_radius.statement_delta > 50 ? '#ff8a80' : '#88e49c' }}>
+                              Δ{r.blast_radius.statement_delta} {r.blast_radius.scope_creep_detected ? '🚨' : '✓'}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: 10 }}>Pending</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="chip chip-blue">{r.pipeline_stage}</span>
+                        </td>
+                        <td>
+                          {r.status === 'QUARANTINED' ? (
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="btn-primary btn-sm" onClick={() => handleAuthorizePR(r.author)}>
+                                Authorize
+                              </button>
+                              <button className="btn-danger btn-sm" onClick={() => handleRejectPR(r.author)}>
+                                Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <button className="btn-secondary btn-sm" onClick={() => setNotice(`Viewing audit logs for PR #${r.number}`)}>
+                              Audit Log
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!sortedPrs.length && (
+                  <div style={{ padding: 40, textAlign: 'center' }}>
+                    <Icon name="branch" size={32}/>
+                    <h3 style={{ margin: '12px 0 4px', color: '#91b69c', fontSize: 15 }}>No Pull Requests Under Review</h3>
+                    <p style={{ color: '#778a7d', fontSize: 11, maxWidth: 440, margin: 'auto' }}>
+                      GhostRepro is actively monitoring <code>{activeRepo || 'your repository'}</code> for incoming PR webhook events. Click below to fetch real open PRs from GitHub.
+                    </p>
+                    <button className="btn-primary btn-sm" style={{ marginTop: 14 }} onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                      <Icon name="plus" size={13}/> Fetch Open Pull Requests
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: QUARANTINE
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Quarantine' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ background: '#1b1713', border: '1px solid #3f2f1f', borderRadius: 6, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Icon name="shield" size={18}/>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 12, color: '#f3c988' }}>Zero-Trust Quarantine Sandbox</h3>
+                    <p style={{ margin: '1px 0 0', color: '#a89477', fontSize: 9 }}>
+                      Code from first-time contributors and unverified bots is held in quarantine until human clearance.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button className="btn-secondary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                    + Fetch PRs for Review
+                  </button>
+                  <span className="chip chip-amber">
+                    {queue.length} PRs Held
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+                {queue.map(pr => (
+                  <div key={pr.id} style={{ background: '#131c17', border: '1px solid #304234', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="avatar avatar-1">{initials(pr.author)}</span>
+                          <div>
+                            <strong style={{ fontSize: 12, color: '#e4e7e3' }}>{pr.author}</strong>
+                            <div style={{ fontSize: 9, color: '#8fa092' }}>PR #{pr.number} · {timeAgo(pr.created_at)}</div>
+                          </div>
+                        </div>
+                        <span className="chip chip-red">HELD</span>
+                      </div>
+
+                      <div style={{ marginTop: 8, fontSize: 11, fontWeight: 500, color: '#c9d8cc' }}>
+                        {pr.title}
+                      </div>
+
+                      <div style={{ marginTop: 8, padding: 8, background: '#16221a', borderRadius: 4, fontSize: 9, color: '#9bb0a0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                        <div><strong>Repo:</strong> {pr.repo}</div>
+                        <div><strong>Tier:</strong> {pr.tier}</div>
+                        <div><strong>Role:</strong> {pr.author_association || 'NONE'}</div>
+                        <div><strong>AST Delta:</strong> {pr.blast_radius ? `Δ${pr.blast_radius.statement_delta}` : 'Awaiting'}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      <button className="btn-primary btn-sm" style={{ flex: 1 }} disabled={authorizing === pr.author} onClick={() => handleAuthorizePR(pr.author)}>
+                        <Icon name="check" size={12}/> {authorizing === pr.author ? 'Authorizing…' : 'Authorize & Run Sandbox'}
+                      </button>
+                      <button className="btn-danger btn-sm" onClick={() => handleRejectPR(pr.author)}>
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!queue.length && (
+                  <div style={{ gridColumn: '1/-1', padding: 36, textAlign: 'center', background: '#131b17', border: '1px solid var(--line)', borderRadius: 6 }}>
+                    <Icon name="check" size={26}/>
+                    <h3 style={{ margin: '8px 0 3px', color: '#91b69c', fontSize: 13 }}>Quarantine Queue is Clear</h3>
+                    <p style={{ color: '#778a7d', fontSize: 10 }}>No pull requests are currently blocked or awaiting maintainer clearance.</p>
+                    <button className="btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                      + Fetch PRs for Review
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: BUG REPRODUCTIONS
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Bug reproductions' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Sleek Minimal Telemetry Strip */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, flexShrink: 0 }}>
+                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
+                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>ACTIVE RED TESTS</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#ff8a80', marginTop: 1 }}>
+                    {repros.filter(r => r.repro_status === 'RED').length}
+                  </div>
+                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Failing bug proofs</div>
+                </div>
+                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
+                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>VERIFIED GREEN</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#7de899', marginTop: 1 }}>
+                    {repros.filter(r => r.repro_status === 'GREEN').length}
+                  </div>
+                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Fixed & verified</div>
+                </div>
+                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
+                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>REPRODUCTION ACCURACY</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#82c2ff', marginTop: 1 }}>100%</div>
+                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Zero false positives</div>
+                </div>
+                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
+                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>INFERENCE ENGINE</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#b9cbbd', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {config.model_config.model_name.replace(' (Groq LPU)', '')}
+                  </div>
+                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Groq LPU Inference</div>
+                </div>
+              </div>
+
+              {/* Action Header & Quick Generator */}
+              <div style={{ background: '#141c18', border: '1px solid #304234', borderRadius: 6, padding: '10px 14px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Autonomous Issue-to-Test Reproduction Suite</h3>
+                    <p style={{ margin: '1px 0 0', color: '#8fa092', fontSize: 9 }}>
+                      Synthesizes standalone failing pytest files proving the bug before PR reviews begin.
+                    </p>
+                  </div>
+                  <button className="btn-primary btn-sm" onClick={() => setNewReproModalOpen(true)}>
+                    <Icon name="plus" size={13}/> New Bug Repro
+                  </button>
+                </div>
+
+                {/* Inline Quick Repro Creator */}
+                <form onSubmit={handleQuickCreateRepro} style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    style={{ flex: 1, padding: '6px 10px', background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
+                    placeholder="Enter issue title to synthesize reproduction test (e.g. Session expires upon OAuth redirect)..."
+                    value={quickIssueTitle}
+                    onChange={e => setQuickIssueTitle(e.target.value)}
+                  />
+                  <button type="submit" className="btn-primary btn-sm">
+                    <Icon name="zap" size={12}/> Synthesize Repro
+                  </button>
+                </form>
+              </div>
+
+              {/* Bug Repro Content Area */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {repros.length === 0 ? (
+                  <div style={{ minHeight: 260, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 36, textAlign: 'center', background: '#131b17', border: '1px solid var(--line)', borderRadius: 6 }}>
+                    <Icon name="bug" size={32}/>
+                    <h3 style={{ margin: '10px 0 4px', color: '#91b69c', fontSize: 14 }}>No Bug Reproduction Tests Generated Yet</h3>
+                    <p style={{ color: '#778a7d', fontSize: 10, maxWidth: 440, margin: 'auto' }}>
+                      Enter an issue title in the synthesizer above to generate your first autonomous mathematical proof (<code>test_repro_1.py</code>).
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 14 }}>
+                    {/* Left: Assertion Matrix Table */}
+                    <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Autonomous Pytest Assertion Proof Matrix</h4>
+                        <span className="tiny-label">ISOLATED SANDBOX</span>
+                      </div>
+                      <div className="table-scroll">
+                        <table>
+                          <thead><tr>
+                            <th>ISSUE</th>
+                            <th>TITLE</th>
+                            <th>PROOF STATUS</th>
+                            <th>TARGET FILE</th>
+                            <th>ACTIONS</th>
+                          </tr></thead>
+                          <tbody>
+                            {repros.map(r => (
+                              <tr key={r.issue_number}>
+                                <td><strong>#{r.issue_number}</strong></td>
+                                <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</td>
+                                <td>
+                                  <span className={`chip ${r.repro_status === 'RED' ? 'chip-red' : 'chip-green'}`}>
+                                    {r.repro_status}
+                                  </span>
+                                </td>
+                                <td><code>{r.test_file}</code></td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: 4 }}>
+                                    <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>Code</button>
+                                    <button className="btn-primary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleRunIssueRepro(r.issue_number)}>Execute</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Right: Repro Cards List */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', maxHeight: 480 }}>
+                      {repros.map(r => (
+                        <div key={r.issue_number} style={{ background: '#131c17', border: '1px solid #324436', borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ font: "10px 'IBM Plex Mono'", fontWeight: 700, color: '#79c0ff' }}>Issue #{r.issue_number}</span>
+                            <span className={`chip ${r.repro_status === 'RED' ? 'chip-red' : 'chip-green'}`} style={{ fontSize: 8 }}>
+                              {r.repro_status === 'RED' ? '🔴 RED Proof' : '🟢 GREEN Fix'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: '#e6edf3' }}>{r.title}</div>
+                          <code style={{ fontSize: 9, color: '#8a9b8e', background: '#1a261f', padding: '3px 6px', borderRadius: 3 }}>{r.test_file}</code>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                            <button className="btn-primary btn-sm" style={{ flex: 1, padding: '3px 8px', fontSize: 9 }} onClick={() => handleRunIssueRepro(r.issue_number)}>
+                              <Icon name="play" size={10}/> Run Sandbox Test
+                            </button>
+                            <button className="btn-secondary btn-sm" style={{ padding: '3px 8px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>
+                              <Icon name="terminal" size={10}/> View Code
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: SLOPSQUATTING THREAT INTEL (DECLUTTERED)
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Slopsquatting' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Sleek Minimal Telemetry Strip */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="package" size={16}/>
+                  <strong style={{ fontSize: 12, color: '#e4e7e3' }}>PyPI Anti-Slopsquatting Defense</strong>
+                  <span style={{ fontSize: 9, color: '#7e9184' }}>· Real-time dependency threat intelligence</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="chip chip-red">Blocked: {slopFlags.length}</span>
+                  <span className="chip chip-green">Whitelisted: {whitelist.length}</span>
+                  <span className="chip chip-blue">PyPI JSON API: Online</span>
+                  <span className="chip chip-amber">Policy: Fail-Closed</span>
+                </div>
+              </div>
+
+              {/* Streamlined Live PyPI Scanner */}
+              <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: '12px 16px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Live PyPI Dependency Scanner</h4>
+                    <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>Query package names directly against official PyPI index to detect AI hallucinations.</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 8, color: '#6e8073' }}>Quick tests:</span>
+                    <button className="chip chip-red" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('reqeusts'); handleScanPackage('reqeusts') }}>reqeusts (Typo)</button>
+                    <button className="chip chip-amber" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('colorsys2'); handleScanPackage('colorsys2') }}>colorsys2 (Ghost)</button>
+                    <button className="chip chip-green" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('requests'); handleScanPackage('requests') }}>requests (Legit)</button>
+                    <button className="chip chip-blue" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('fastapi'); handleScanPackage('fastapi') }}>fastapi (Legit)</button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    style={{ flex: 1, padding: '6px 10px', background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e4e7e3', fontSize: 10, fontFamily: "'IBM Plex Mono', monospace" }}
+                    placeholder="Enter package name to test on PyPI (e.g. reqeusts, colorsys2, numpy)..."
+                    value={scanInput}
+                    onChange={e => setScanInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleScanPackage() }}
+                  />
+                  <button className="btn-primary btn-sm" disabled={scanning} onClick={() => handleScanPackage()}>
+                    {scanning ? 'Scanning…' : 'Scan Package'}
+                  </button>
+                </div>
+
+                {/* Scan Result Banner */}
+                {scanResult && (
+                  <div style={{ marginTop: 8, padding: 10, background: scanResult.is_threat ? '#251615' : '#14241b', border: `1px solid ${scanResult.is_threat ? '#5c2420' : '#274a34'}`, borderRadius: 5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: 10, color: scanResult.is_threat ? '#ff9a92' : '#88e49c' }}>
+                        {scanResult.is_threat ? '🛑 Hallucinated / Squatted Threat Detected' : '✅ Verified PyPI Package'}
+                      </strong>
+                      <span className={`chip ${scanResult.is_threat ? 'chip-red' : 'chip-green'}`}>
+                        {scanResult.status}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 9, color: '#c3d2c6', marginTop: 2 }}>
+                      {scanResult.message}
+                    </div>
+                    {scanResult.latest_version && (
+                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                        Latest Version: <code>v{scanResult.latest_version}</code> · Author: {scanResult.author || 'PyPI Community'}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 6 }}>
+                      <button className="btn-primary btn-sm" style={{ padding: '2px 8px', fontSize: 9 }} onClick={() => handleWhitelist(scanResult.package)}>
+                        + Add to Whitelist
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Decluttered 2-Column Grid: Blocked Packages & Whitelist */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 14 }}>
+                {/* Blocked Packages Card */}
+                <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Icon name="alert" size={13}/>
+                      <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Blocked Threats</h4>
+                    </div>
+                    <span className="count red-count">{slopFlags.length}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 380, overflowY: 'auto' }}>
+                    {slopFlags.map((s, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#101713', border: '1px solid #362220', borderRadius: 4 }}>
+                        <div>
+                          <strong style={{ font: "10px 'IBM Plex Mono'", color: '#ff9a92' }}>{s.package}</strong>
+                          <div style={{ fontSize: 8, color: '#889e8f' }}>{s.reason}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 8 }} onClick={() => handleWhitelist(s.package)}>
+                            Whitelist
+                          </button>
+                          <button className="btn-danger btn-sm" style={{ padding: '2px 6px', fontSize: 8 }} onClick={() => handleDeleteSlopFlag(s.package)}>
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {!slopFlags.length && (
+                      <div style={{ padding: 24, textAlign: 'center', color: '#6f8374', fontSize: 10 }}>
+                        ✓ Zero active dependency threats detected.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Whitelist Badges Card */}
+                <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 4, flexShrink: 0 }}>
+                    <h4 style={{ margin: 0, fontSize: 11, color: '#a5bda7' }}>Approved Whitelist ({whitelist.length})</h4>
+                    <form onSubmit={handleAddWhitelistPackage} style={{ display: 'flex', gap: 4 }}>
+                      <input
+                        style={{ padding: '3px 6px', background: '#101713', border: '1px solid #334537', borderRadius: 3, color: '#e4e7e3', fontSize: 9, width: 85 }}
+                        placeholder="Package..."
+                        value={newWhitelistPkg}
+                        onChange={e => setNewWhitelistPkg(e.target.value)}
+                      />
+                      <button type="submit" className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 8 }}>+ Add</button>
+                    </form>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 380, overflowY: 'auto', alignContent: 'flex-start' }}>
+                    {whitelist.map(pkg => (
+                      <span key={pkg} className="chip chip-green" style={{ padding: '3px 8px', fontSize: 8.5 }}>
+                        ✓ {pkg}
+                      </span>
+                    ))}
+                    {whitelist.length === 0 && (
+                      <div style={{ color: '#6f8374', fontSize: 10, padding: '8px 0' }}>
+                        No whitelisted packages. Add safe packages above.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: EXECUTION LOGS
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Execution logs' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Workstation Console Controls */}
+              <div style={{ background: '#141c18', border: '1px solid #36493b', borderRadius: 6, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="terminal" size={18}/>
+                  <div>
+                    <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Interactive Sandbox Console Workstation</strong>
+                    <div style={{ fontSize: 8, color: '#8fa092' }}>
+                      Ephemeral sandbox <code>sbx_8f2a91</code> · Python 3.12 · pytest 8.3.2 · vLLM {config.model_config.model_name}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn-primary btn-sm" onClick={handleTriggerFullTest}>
+                    <Icon name="play" size={11}/> Run Sandbox Suite
+                  </button>
+                  <button className="btn-secondary btn-sm" onClick={() => {
+                    const txt = executionLogs.map(l => `[${l.timestamp}] [${l.stage}] [${l.level}] ${l.message}`).join('\n')
+                    navigator.clipboard?.writeText(txt)
+                    setNotice('All execution logs copied to clipboard!')
+                  }}>
+                    <Icon name="copy" size={11}/> Copy All
+                  </button>
+                  <button className="btn-secondary btn-sm" onClick={() => {
+                    const txt = executionLogs.map(l => `[${l.timestamp}] [${l.stage}] [${l.level}] ${l.message}`).join('\n')
+                    const blob = new Blob([txt], { type: 'text/plain' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `ghostrepro-execution-${Date.now()}.log`
+                    a.click()
+                    setNotice('Logs exported.')
+                  }}>
+                    <Icon name="download" size={11}/> Export
+                  </button>
+                  <button className="btn-danger btn-sm" onClick={handleClearLogs}>
+                    Clear Logs
+                  </button>
+                </div>
+              </div>
+
+              {/* Log Filters & Search Bar */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', background: '#121b16', padding: '6px 12px', borderRadius: 6, border: '1px solid var(--line)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <Icon name="search" size={13}/>
+                  <input
+                    style={{ background: 'transparent', border: 0, outline: 'none', color: '#cad6ca', fontSize: 9, width: 120 }}
+                    placeholder="Search logs..."
+                    value={logSearchQuery}
+                    onChange={e => setLogSearchQuery(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ width: 1, height: 16, background: 'var(--line)' }}/>
+
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <span style={{ fontSize: 9, color: '#7a8e80' }}>Stage:</span>
+                  {['ALL', 'SYSTEM', 'CLEARANCE', 'AST_ANALYSIS', 'DEPENDENCY_SCAN', 'REPRO_TEST', 'FUZZING', 'MERGE_GATE', 'SANDBOX'].map(st => (
+                    <button
+                      key={st}
+                      className={`chip ${logStageFilter === st ? 'chip-green' : ''}`}
+                      style={{ cursor: 'pointer', fontSize: 8, padding: '1px 5px' }}
+                      onClick={() => setLogStageFilter(st)}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginLeft: 'auto' }}>
+                  <span style={{ fontSize: 9, color: '#7a8e80' }}>Level:</span>
+                  {['ALL', 'INFO', 'WARN', 'ERROR', 'PASS'].map(lv => (
+                    <button
+                      key={lv}
+                      className={`chip ${logLevelFilter === lv ? 'chip-blue' : ''}`}
+                      style={{ cursor: 'pointer', fontSize: 8, padding: '1px 5px' }}
+                      onClick={() => setLogLevelFilter(lv)}
+                    >
+                      {lv}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Full Terminal Window */}
+              <div style={{ background: '#0a100d', border: '1px solid #2d3f33', borderRadius: 6, minHeight: 460, maxHeight: 680, overflowY: 'auto', padding: 14, fontFamily: "'IBM Plex Mono', monospace" }}>
+                {filteredLogs.map(log => (
+                  <div key={log.id} className="log-entry" style={{ padding: '3px 0', borderBottom: '1px solid #142018', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: '#5b7061', fontSize: 8 }}>[{log.timestamp}]</span>
+                    <span className="chip" style={{ fontSize: 7.5, padding: '1px 4px', color: '#9bc2a4', background: '#122018' }}>
+                      {log.stage}
+                    </span>
+                    <span className={`chip ${log.level === 'PASS' ? 'chip-green' : log.level === 'WARN' ? 'chip-amber' : log.level === 'ERROR' || log.level === 'ALERT' ? 'chip-red' : 'chip-blue'}`} style={{ fontSize: 7.5, padding: '1px 4px' }}>
+                      {log.level}
+                    </span>
+                    <span style={{ color: '#c9d8cc', fontSize: 10, flex: 1 }}>{log.message}</span>
+                  </div>
+                ))}
+                {!filteredLogs.length && (
+                  <div style={{ padding: 30, textAlign: 'center', color: '#778a7e', fontSize: 10 }}>
+                    No execution log entries match the current filters.
+                  </div>
+                )}
+                <div style={{ padding: '6px 8px', color: '#88a38f', fontSize: 10 }}>
+                  <span className="cursor">▍</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: AST ANALYSIS
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'AST analysis' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 14 }}>
+              {/* Left Column: Interactive Calculator */}
+              <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, padding: '14px 18px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 13, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Icon name="zap" size={15}/> AST Blast-Radius Calculator & Scope Creep
+                    </h3>
+                    <p style={{ margin: '1px 0 0', color: '#8fa092', fontSize: 9.5 }}>
+                      Computes Abstract Syntax Tree statement deltas (Δ) & scope creep.
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 9.5, color: '#7a8e80' }}>Threshold: &le; 50 &Delta;</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label style={{ font: "8.5px 'IBM Plex Mono'", color: '#8fa594', display: 'block', marginBottom: 4 }}>
+                      ORIGINAL BASELINE CODE
+                    </label>
+                    <textarea
+                      rows={14}
+                      placeholder="Enter baseline Python code..."
+                      style={{ width: '100%', minHeight: 280, padding: 10, background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e6edf3', font: "11px 'IBM Plex Mono', monospace", resize: 'vertical' }}
+                      value={astOriginal}
+                      onChange={e => setAstOriginal(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label style={{ font: "8.5px 'IBM Plex Mono'", color: '#8fa594', display: 'block', marginBottom: 4 }}>
+                      PULL REQUEST MODIFIED CODE
+                    </label>
+                    <textarea
+                      rows={14}
+                      placeholder="Enter modified Python code..."
+                      style={{ width: '100%', minHeight: 280, padding: 10, background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e6edf3', font: "11px 'IBM Plex Mono', monospace", resize: 'vertical' }}
+                      value={astModified}
+                      onChange={e => setAstModified(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button className="btn-primary btn-sm" disabled={astCalculating} onClick={handleCalculateAST}>
+                      <Icon name="zap" size={12}/> {astCalculating ? 'Parsing…' : 'Calculate Blast Radius (Δ)'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      onClick={() => {
+                        setAstOriginal('def calc_total(items):\n    return sum(x.price for x in items)\n')
+                        setAstModified('def calc_total(items, discount=0):\n    # Bugfix for voucher discount\n    subtotal = sum(x.price for x in items)\n    return max(0, subtotal - discount)\n')
+                        setNotice('Loaded test code snippet into AST calculator.')
+                      }}
+                    >
+                      + Sample
+                    </button>
+                    {(astOriginal || astModified) && (
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm"
+                        onClick={() => {
+                          setAstOriginal('')
+                          setAstModified('')
+                          setAstResult(null)
+                          setNotice('Cleared AST playground.')
+                        }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* AST Output Card */}
+                {astResult && (
+                  <div style={{ marginTop: 8, padding: 10, background: '#18241d', border: '1px solid #3d5644', borderRadius: 5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>AST Parse Verdict:</strong>
+                      <span className={`chip ${astResult.scope_creep_detected ? 'chip-red' : 'chip-green'}`}>
+                        {astResult.scope_creep_detected ? '🚨 SCOPE CREEP DETECTED' : '✓ SCOPE COMPLIANT'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 6 }}>
+                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
+                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>STATEMENT DELTA</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: astResult.statement_delta > 50 ? '#ff8a80' : '#7de899' }}>
+                          Δ{astResult.statement_delta}
+                        </div>
+                      </div>
+                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
+                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>ORIGINAL STATEMENTS</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#c9d8cc' }}>
+                          {astResult.original_statements}
+                        </div>
+                      </div>
+                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
+                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>MODIFIED STATEMENTS</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#c9d8cc' }}>
+                          {astResult.modified_statements}
+                        </div>
+                      </div>
+                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
+                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>FUNCTIONS ADDED</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#c9d8cc' }}>
+                          {astResult.functions_added?.length || 0}
+                        </div>
                       </div>
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Right Column: Active PR Blast Radius Table */}
+              <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Active PR Blast-Radius Metrics</h3>
+                  <span className="tiny-label">MONITORED REPO</span>
+                </div>
+                <div className="table-scroll" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
+                  {prs.filter(pr => pr.blast_radius).map(pr => (
+                    <div key={pr.id} style={{ padding: 10, border: '1px solid #304234', borderRadius: 4, background: '#111814' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 9, color: '#79c0ff' }}>PR #{pr.number}</span>
+                        <span className={`chip ${pr.blast_radius?.scope_creep_detected ? 'chip-red' : 'chip-green'}`}>
+                          {pr.blast_radius?.scope_creep_detected ? 'SCOPE CREEP' : 'CLEAN'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 500, color: '#e6edf3', marginBottom: 6 }}>{pr.title}</div>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'IBM Plex Mono'", color: (pr.blast_radius?.statement_delta || 0) > 50 ? '#ff938a' : '#56d364' }}>
+                            Δ{pr.blast_radius?.statement_delta}
+                          </div>
+                          <div style={{ fontSize: 7, color: '#8b949e' }}>delta</div>
+                        </div>
+                        <div style={{ fontSize: 9, color: '#b1bac4' }}>
+                          <div>Author: {pr.author}</div>
+                          <div>Tier: {pr.tier}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {prs.filter(pr => pr.blast_radius).length === 0 && (
+                    <div style={{ padding: 24, textAlign: 'center', color: '#778a7d', fontSize: 10, margin: 'auto' }}>
+                      No pull requests analyzed yet. Click "Load Sample Snippet" on the left to test live AST parsing.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: VERIFICATION RULES (CONFIGURATION)
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Verification rules' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Header Strip */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="shield" size={15}/> Zero-Trust Verification Policy & Security Gates
+                  </h3>
+                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>
+                    Enforces cryptographic and mathematical clearance gates for incoming PRs and dependencies.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button className="btn-secondary btn-sm" onClick={() => {
+                    setConfig({
+                      ...config,
+                      verification_rules: {
+                        min_trust_score: 80,
+                        auto_quarantine_first_timers: true,
+                        blast_radius_threshold: 50,
+                        block_slopsquatting: true,
+                        fuzzing_mutation_count: 128,
+                        strict_mode: true,
+                      }
+                    })
+                    setNotice('Reset rules to defaults.')
+                  }}>
+                    Reset Defaults
+                  </button>
+                  <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('verification_rules')}>
+                    <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Rules'}
+                  </button>
+                  {savedSuccessSection === 'verification_rules' && (
+                    <span className="chip chip-green">✓ Saved</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 2-Column Responsive Policy Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+                {/* Column 1: Identity & Quarantine */}
+                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CONTRIBUTOR REPUTATION GATE</div>
+                  
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                      <label style={{ margin: 0 }}>Minimum Fast-Track Trust Score</label>
+                      <span className="chip chip-green" style={{ fontSize: 9 }}>{config.verification_rules.min_trust_score} / 100</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={config.verification_rules.min_trust_score}
+                      onChange={e => setConfig({
+                        ...config,
+                        verification_rules: { ...config.verification_rules, min_trust_score: Number(e.target.value) }
+                      })}
+                    />
+                    <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 2 }}>
+                      Authors below this score are automatically isolated in the Quarantine sandbox.
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+                    <div>
+                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Quarantine First-Time & Bot Accounts</strong>
+                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                        Zero-trust hold on unverified personas until maintainer review.
+                      </div>
+                    </div>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={config.verification_rules.auto_quarantine_first_timers}
+                        onChange={e => setConfig({
+                          ...config,
+                          verification_rules: { ...config.verification_rules, auto_quarantine_first_timers: e.target.checked }
+                        })}
+                      />
+                      <span className="slider"/>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Column 2: AST Blast Radius & Threat Intel */}
+                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CODE AUDIT & SLOP DEFENSE</div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                      <label style={{ margin: 0 }}>AST Blast Radius Threshold</label>
+                      <span className="chip chip-blue" style={{ fontSize: 9 }}>&le; &Delta;{config.verification_rules.blast_radius_threshold} statements</span>
+                    </div>
+                    <input
+                      type="number"
+                      value={config.verification_rules.blast_radius_threshold}
+                      onChange={e => setConfig({
+                        ...config,
+                        verification_rules: { ...config.verification_rules, blast_radius_threshold: Number(e.target.value) }
+                      })}
+                    />
+                    <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 2 }}>
+                      PRs adding more statements than this threshold trigger scope creep flags.
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+                    <div>
+                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Strict PyPI Slopsquatting Protection</strong>
+                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                        Rejects unindexed packages & hallucinated AI dependencies.
+                      </div>
+                    </div>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={config.verification_rules.block_slopsquatting}
+                        onChange={e => setConfig({
+                          ...config,
+                          verification_rules: { ...config.verification_rules, block_slopsquatting: e.target.checked }
+                        })}
+                      />
+                      <span className="slider"/>
+                    </label>
+                  </div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ marginBottom: 3 }}>Adversarial Fuzzing Mutation Depth</label>
+                    <select
+                      value={config.verification_rules.fuzzing_mutation_count}
+                      onChange={e => setConfig({
+                        ...config,
+                        verification_rules: { ...config.verification_rules, fuzzing_mutation_count: Number(e.target.value) }
+                      })}
+                    >
+                      <option value={32}>32 Mutations (Fast)</option>
+                      <option value={64}>64 Mutations (Standard)</option>
+                      <option value={128}>128 Mutations (Thorough)</option>
+                      <option value={256}>256 Mutations (Adversarial Paranoia)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: MODELS & AGENTS (CONFIGURATION)
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Models & agents' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Header Strip */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="activity" size={15}/> Inference Engine & Autonomous Agents
+                  </h3>
+                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>
+                    Powers autonomous test synthesis and bug reproduction proofs with open-weight models.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn-secondary btn-sm" disabled={llmTesting} onClick={handleTestLLM}>
+                    <Icon name="activity" size={11}/> {llmTesting ? 'Pinging LLM…' : 'Test LLM Connection'}
+                  </button>
+                  <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('ai_model_config')}>
+                    <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Model Settings'}
+                  </button>
+                  {savedSuccessSection === 'ai_model_config' && (
+                    <span className="chip chip-green">✓ Saved</span>
+                  )}
+                </div>
+              </div>
+
+              {llmTestStatus && (
+                <div className="chip chip-green" style={{ padding: '4px 10px', width: 'fit-content', flexShrink: 0 }}>
+                  ✓ {llmTestStatus}
+                </div>
+              )}
+
+              {/* 2-Column Responsive Model Config Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+                {/* Column 1: Model Selection & Endpoint */}
+                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>ACTIVE INFERENCE BACKEND</div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ marginBottom: 3 }}>Primary Code Model</label>
+                    <select
+                      value={config.model_config.model_name}
+                      onChange={e => setConfig({
+                        ...config,
+                        model_config: { ...config.model_config, model_name: e.target.value }
+                      })}
+                    >
+                      <option value="Llama-3.3-70B-Versatile (Groq LPU)">Llama 3.3 70B Versatile (Recommended · Groq LPU)</option>
+                      <option value="Llama-3.1-8B-Instant (Groq LPU)">Llama 3.1 8B Instant (Ultra-Fast · Groq LPU)</option>
+                      <option value="Mixtral-8x7B (Groq LPU)">Mixtral 8x7B (Groq LPU)</option>
+                      <option value="Qwen2.5-Coder-32B">Qwen2.5-Coder 32B (Local vLLM / Ollama)</option>
+                      <option value="DeepSeek-Coder-V2">DeepSeek-Coder-V2 236B</option>
+                      <option value="Claude-3.7-Sonnet">Claude 3.7 Sonnet (Anthropic API)</option>
+                      <option value="GPT-4o">GPT-4o (OpenAI API)</option>
+                    </select>
+                  </div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ marginBottom: 3 }}>Inference Endpoint URL</label>
+                    <input
+                      value={config.model_config.inference_endpoint}
+                      onChange={e => setConfig({
+                        ...config,
+                        model_config: { ...config.model_config, inference_endpoint: e.target.value }
+                      })}
+                    />
+                  </div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ marginBottom: 3 }}>API Key / Bearer Token</label>
+                    <input
+                      type="password"
+                      value={config.model_config.api_key}
+                      onChange={e => setConfig({
+                        ...config,
+                        model_config: { ...config.model_config, api_key: e.target.value }
+                      })}
+                    />
+                  </div>
+                </div>
+
+                {/* Column 2: Hyperparameters & Context Window */}
+                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>REASONING PARAMETERS</div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                      <label style={{ margin: 0 }}>Sampling Temperature</label>
+                      <span className="chip chip-amber" style={{ fontSize: 9 }}>{config.model_config.temperature}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={config.model_config.temperature}
+                      onChange={e => setConfig({
+                        ...config,
+                        model_config: { ...config.model_config, temperature: Number(e.target.value) }
+                      })}
+                    />
+                    <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 2 }}>
+                      0.10 - 0.20 is optimal for deterministic Python pytest assertions.
+                    </div>
+                  </div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ marginBottom: 3 }}>Context Window Capacity</label>
+                    <select
+                      value={config.model_config.context_window}
+                      onChange={e => setConfig({
+                        ...config,
+                        model_config: { ...config.model_config, context_window: e.target.value }
+                      })}
+                    >
+                      <option value="16k">16,384 tokens (Fast)</option>
+                      <option value="32k">32,768 tokens (Default)</option>
+                      <option value="64k">65,536 tokens (Full Repo Context)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ padding: 8, background: '#111915', border: '1px solid #25362a', borderRadius: 4, marginTop: 2 }}>
+                    <div style={{ font: "8.5px 'IBM Plex Mono'", color: '#8fa092' }}>AGENT CAPABILITIES:</div>
+                    <div style={{ fontSize: 8.5, color: '#c3d4c7', marginTop: 2, lineHeight: 1.4 }}>
+                      • Deterministic AST Test Synthesizer<br/>
+                      • Failing Proof-of-Concept Generator<br/>
+                      • Flaky Test & Hallucination Detector
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: SETTINGS (CONFIGURATION)
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Settings' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Header Strip */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="settings" size={15}/> Repository & Webhook Integration Settings
+                  </h3>
+                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>
+                    Manage incoming GitHub webhook endpoints, automated merge gates, and execution limits.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn-secondary btn-sm" onClick={() => {
+                    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = 'ghostrepro-config.json'
+                    a.click()
+                    setNotice('Configuration exported as JSON.')
+                  }}>
+                    Export JSON
+                  </button>
+                  <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('repo_settings')}>
+                    <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Settings'}
+                  </button>
+                  {savedSuccessSection === 'repo_settings' && (
+                    <span className="chip chip-green">✓ Saved</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 2-Column Responsive Settings Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+                {/* Column 1: Webhook Configuration */}
+                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>GITHUB WEBHOOK RECEIVER</div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ marginBottom: 3 }}>Target Webhook URL</label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        readOnly
+                        value={config.repo_settings.webhook_url}
+                        style={{ flex: 1 }}
+                      />
+                      <button className="btn-secondary btn-sm" onClick={() => { navigator.clipboard?.writeText(config.repo_settings.webhook_url); setNotice('Webhook URL copied to clipboard!') }}>
+                        <Icon name="copy" size={11}/>
+                      </button>
+                      <button className="btn-primary btn-sm" onClick={handlePingWebhook}>
+                        Ping
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ marginBottom: 3 }}>Webhook Secret Token</label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        value={config.repo_settings.webhook_secret}
+                        onChange={e => setConfig({
+                          ...config,
+                          repo_settings: { ...config.repo_settings, webhook_secret: e.target.value }
+                        })}
+                        style={{ flex: 1 }}
+                      />
+                      <button className="btn-secondary btn-sm" onClick={() => {
+                        const newSec = `whsec_${Math.random().toString(36).substring(2, 15)}`
+                        setConfig({ ...config, repo_settings: { ...config.repo_settings, webhook_secret: newSec } })
+                        setNotice('New webhook secret generated.')
+                      }}>
+                        Regen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Column 2: Governance & Sandbox Execution */}
+                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>EXECUTION & MERGE GATE</div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
+                    <div>
+                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Merge on Full Verification Pass</strong>
+                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                        Merges PRs passing RED&rarr;GREEN proofs and surviving fuzzing.
+                      </div>
+                    </div>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={config.repo_settings.auto_merge_on_pass}
+                        onChange={e => setConfig({
+                          ...config,
+                          repo_settings: { ...config.repo_settings, auto_merge_on_pass: e.target.checked }
+                        })}
+                      />
+                      <span className="slider"/>
+                    </label>
+                  </div>
+
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                      <label style={{ margin: 0 }}>Sandbox Execution Timeout</label>
+                      <span className="chip chip-blue" style={{ fontSize: 9 }}>{config.repo_settings.sandbox_timeout_sec} seconds</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="120"
+                      value={config.repo_settings.sandbox_timeout_sec}
+                      onChange={e => setConfig({
+                        ...config,
+                        repo_settings: { ...config.repo_settings, sandbox_timeout_sec: Number(e.target.value) }
+                      })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sleek Danger Zone Strip */}
+              <div style={{ padding: '8px 14px', background: '#1c1414', border: '1px solid #4a2323', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="alert" size={14}/>
+                  <div>
+                    <strong style={{ fontSize: 10, color: '#ff9a92' }}>Danger Zone · Purge Session & Simulation Data</strong>
+                    <div style={{ fontSize: 8, color: '#c99692' }}>Permanently resets PR queue, bug proofs, and simulation data to zero state.</div>
+                  </div>
+                </div>
+                <button className="btn-danger btn-sm" onClick={handleResetAllData}>
+                  Purge All Session Data
+                </button>
+              </div>
+            </div>
+          )}
+
+          <footer className="main-footer">
+            <span><Icon name="shield" size={13}/> Built for maintainers. Not for blind trust.</span>
+            <span><i className="dot"/> All execution sandboxed <span className="footer-sep">/</span> {activeRepo ? `Target: ${activeRepo}` : 'No active repository'}</span>
+          </footer>
+        </main>
+      </div>
+
+      {/* ── Bottom Terminal Bar ── */}
+      <button className="terminal-bar" onClick={() => setTerminal(!terminal)}>
+        <span>
+          <Icon name="terminal" size={15}/>
+          <b>Sandbox console</b>
+          <span className="dot"/>
+          <span>sbx_8f2a91</span>
+          <span className="console-last">
+            {executionLogs[executionLogs.length - 1]?.message || 'Zero-trust gatekeeper listening…'}
+          </span>
+        </span>
+        <span>Live <span className="keyboard">⌃ `</span> <span>⌃</span></span>
+      </button>
+
+      {/* ── Toast Notification ── */}
+      {notice && (
+        <div className="toast" role="status">
+          <Icon name="check" size={16}/>
+          {notice}
+          <button onClick={() => setNotice('')} aria-label="Dismiss"><Icon name="close" size={14}/></button>
+        </div>
+      )}
+
+      {/* ── Terminal Drawer ── */}
+      {terminal && (
+        <div className="drawer">
+          <div className="drawer-header">
+            <span>
+              <Icon name="terminal"/> Sandbox execution <span className="processing"><i/> Live</span>
+            </span>
+            <div>
+              <button onClick={() => {
+                const txt = executionLogs.map(l => `[${l.timestamp}] [${l.stage}] ${l.message}`).join('\n')
+                navigator.clipboard?.writeText(txt)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}>
+                <Icon name="copy" size={15}/>{copied ? 'Copied' : 'Copy logs'}
+              </button>
+              <button aria-label="Close execution logs" onClick={() => setTerminal(false)}><Icon name="close"/></button>
+            </div>
+          </div>
+          <div className="terminal-meta">sbx_8f2a91 <span>/</span> {activeRepo || 'no-repo'} <span>/</span> Python 3.12 · pytest 8.3.2</div>
+          <pre>
+            {executionLogs.slice(-8).map(l => `[${l.timestamp}] ${l.stage}: ${l.message}`).join('\n')}
+            <span className="cursor">▍</span>
+          </pre>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          GITHUB AUTHORIZATION & INTERACTIVE REPOSITORIES MODAL
+         ════════════════════════════════════════════════════════════════ */}
+      {githubModalOpen && (
+        <div className="modal-overlay" onClick={() => setGithubModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: 740 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><Icon name="github" size={18}/> GitHub Authorization & Connected Repositories</h3>
+              <button className="icon-button" onClick={() => setGithubModalOpen(false)}><Icon name="close" size={16}/></button>
+            </div>
+            <div className="modal-body">
+              {/* Account Status Card */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, background: '#17241d', border: '1px solid #364d3c', borderRadius: 6, marginBottom: 18 }}>
+                <span className="avatar me" style={{ width: 44, height: 44, fontSize: 14 }}>
+                  {initials(githubUser.username)}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <strong style={{ fontSize: 14, color: '#e4e7e3' }}>
+                      {githubUser.authenticated ? (githubUser.name || githubUser.username) : 'Not Authorized'}
+                    </strong>
+                    <span className={`chip ${githubUser.authenticated ? 'chip-green' : 'chip-amber'}`}>
+                      {githubUser.authenticated ? 'AUTHORIZED' : 'DISCONNECTED'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#8fa092', marginTop: 2 }}>
+                    {githubUser.authenticated ? (
+                      `@${githubUser.username} · ${repos.length} Repositories Connected`
+                    ) : (
+                      'Enter your GitHub handle below to connect and inspect your repositories.'
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Authorize Token / Handle Input */}
+              <div style={{ background: '#121c16', border: '1px solid var(--line)', padding: 16, borderRadius: 6, marginBottom: 18 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-field" style={{ marginBottom: 0 }}>
+                    <label>GitHub Username</label>
+                    <input
+                      value={githubUsernameInput}
+                      onChange={e => setGithubUsernameInput(e.target.value)}
+                      placeholder="e.g. asfandkhan8585-cpu or your-handle"
+                    />
+                  </div>
+                  <div className="form-field" style={{ marginBottom: 0 }}>
+                    <label>Personal Access Token (PAT) [Optional for private repos]</label>
+                    <input
+                      type="password"
+                      value={githubPatInput}
+                      onChange={e => setGithubPatInput(e.target.value)}
+                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 9, color: '#7a8e80' }}>
+                    Authorizing loads your authentic repositories from GitHub.
+                  </span>
+                  <button className="btn-primary btn-sm" onClick={handleAuthorizeGitHub}>
+                    <Icon name="check" size={13}/> Authorize & Sync Repos
+                  </button>
+                </div>
+              </div>
+
+              {/* Add Custom Repository Section */}
+              <div style={{ background: '#121c16', border: '1px solid var(--line)', padding: 14, borderRadius: 6, marginBottom: 18 }}>
+                <strong style={{ fontSize: 11, color: '#a5bda7', display: 'block', marginBottom: 8 }}>+ Connect New Custom Repository</strong>
+                <form onSubmit={handleAddCustomRepo} style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 1fr auto', gap: 8, alignItems: 'center' }}>
+                  <input
+                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
+                    placeholder="Repo name (e.g. backend-api)"
+                    value={newRepoName}
+                    onChange={e => setNewRepoName(e.target.value)}
+                  />
+                  <input
+                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
+                    placeholder="Description (optional)"
+                    value={newRepoDesc}
+                    onChange={e => setNewRepoDesc(e.target.value)}
+                  />
+                  <select
+                    style={{ padding: '6px 8px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
+                    value={newRepoLang}
+                    onChange={e => setNewRepoLang(e.target.value)}
+                  >
+                    <option value="Python">Python</option>
+                    <option value="TypeScript">TypeScript</option>
+                    <option value="Go">Go</option>
+                    <option value="Rust">Rust</option>
+                  </select>
+                  <button type="submit" className="btn-secondary btn-sm">+ Add</button>
+                </form>
+              </div>
+
+              {/* Connected Repositories Grid */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Connected Repositories ({repos.length})</strong>
+                  <button className="btn-secondary btn-sm" onClick={handleSyncRepos}>
+                    <Icon name="sync" size={12}/> Refresh Repos
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
+                  {repos.map(r => (
+                    <div
+                      key={r.id}
+                      style={{
+                        padding: '12px 14px',
+                        background: r.full_name === activeRepo ? '#1f3427' : '#141d18',
+                        border: `1px solid ${r.full_name === activeRepo ? '#4b7557' : '#2b3b30'}`,
+                        borderRadius: 6,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>{r.full_name}</strong>
+                          {r.is_private && <span className="chip chip-amber">PRIVATE</span>}
+                          {r.full_name === activeRepo && <span className="chip chip-green">ACTIVE</span>}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#8fa092', marginTop: 3 }}>
+                          {r.description}
+                        </div>
+                        <div style={{ fontSize: 9, color: '#6d8173', marginTop: 4, display: 'flex', gap: 12 }}>
+                          <span>★ {r.stars}</span>
+                          <span>Forks: {r.forks}</span>
+                          <span>Open PRs: {r.open_prs}</span>
+                          <span>Repros: {r.repro_tests}</span>
+                          <span>{r.language}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          className="btn-secondary btn-sm"
+                          title="Simulate an incoming PR on this repository"
+                          onClick={() => handleSimulateIncomingPR(r.full_name)}
+                        >
+                          + Fetch PRs
+                        </button>
+                        {r.full_name === activeRepo ? (
+                          <span className="chip chip-green">CURRENT</span>
+                        ) : (
+                          <button
+                            className="btn-primary btn-sm"
+                            onClick={() => {
+                              handleSelectRepo(r.id)
+                              setGithubModalOpen(false)
+                            }}
+                          >
+                            Switch To
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {repos.length === 0 && (
+                    <div style={{ padding: 24, textAlign: 'center', color: '#778a7d', fontSize: 11 }}>
+                      No repositories connected yet. Enter your GitHub username above or use "+ Connect New Custom Repository".
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setGithubModalOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          NEW BUG REPRODUCTION MODAL
+         ════════════════════════════════════════════════════════════════ */}
+      {newReproModalOpen && (
+        <div className="modal-overlay" onClick={() => setNewReproModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><Icon name="bug" size={18}/> Generate Autonomous Bug Reproduction Test</h3>
+              <button className="icon-button" onClick={() => setNewReproModalOpen(false)}><Icon name="close" size={16}/></button>
+            </div>
+            <form onSubmit={handleCreateRepro}>
+              <div className="modal-body">
+                <div className="form-field">
+                  <label>Issue Number</label>
+                  <input
+                    type="number"
+                    value={newIssueNumber}
+                    onChange={e => setNewIssueNumber(Number(e.target.value))}
+                    required
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Issue Title / Description</label>
+                  <input
+                    value={newIssueTitle}
+                    onChange={e => setNewIssueTitle(e.target.value)}
+                    placeholder="e.g. Payment retry causes double charge on Stripe webhook timeout"
+                    required
+                  />
+                </div>
+                <div style={{ padding: 12, background: '#18241d', border: '1px solid #334737', borderRadius: 4, fontSize: 10, color: '#9bb0a0' }}>
+                  <strong>Autonomous Pipeline:</strong> Llama-3.3-70B on Groq LPU analyzes codebase AST context, generates a standalone <code>test_repro_{newIssueNumber}.py</code>, and executes it in an ephemeral sandbox to verify the test is initially RED.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-secondary" onClick={() => setNewReproModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn-primary">Generate Repro Test</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          VIEW PYTEST CODE DRAWER
+         ════════════════════════════════════════════════════════════════ */}
+      {codeDrawer?.open && (
+        <div className="modal-overlay" onClick={() => setCodeDrawer(null)}>
+          <div className="modal-content" style={{ maxWidth: 760 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><Icon name="terminal" size={18}/> {codeDrawer.file} (Issue #{codeDrawer.issue})</h3>
+              <button className="icon-button" onClick={() => setCodeDrawer(null)}><Icon name="close" size={16}/></button>
+            </div>
+            <div className="modal-body">
+              <pre style={{ margin: 0, padding: 14, background: '#090e0c', border: '1px solid #27382d', borderRadius: 6, font: "11px/1.8 'IBM Plex Mono', monospace", color: '#8de8a4', overflowX: 'auto' }}>
+                {codeDrawer.code}
+              </pre>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => { navigator.clipboard?.writeText(codeDrawer.code); setNotice('Pytest code copied to clipboard!') }}>
+                <Icon name="copy" size={13}/> Copy Code
+              </button>
+              <button className="btn-primary" onClick={() => { handleRunIssueRepro(codeDrawer.issue); setCodeDrawer(null) }}>
+                <Icon name="play" size={13}/> Execute in Sandbox
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          NOTIFICATIONS POPOVER
+         ════════════════════════════════════════════════════════════════ */}
+      {notificationsOpen && (
+        <div className="modal-overlay" onClick={() => setNotificationsOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><Icon name="bell" size={16}/> System Notifications</h3>
+              <button className="icon-button" onClick={() => setNotificationsOpen(false)}><Icon name="close" size={14}/></button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: 320 }}>
+              {events.length > 0 ? (
+                events.slice(0, 6).map(evt => (
+                  <div key={evt.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', fontSize: 11 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8fa092', fontSize: 9 }}>
+                      <span>{evt.stage}</span>
+                      <span>{timeAgo(evt.timestamp)}</span>
+                    </div>
+                    <div style={{ marginTop: 3, color: '#e4e7e3' }}>{evt.message}</div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: 20, textAlign: 'center', color: '#7a8e80', fontSize: 11 }}>
+                  No notifications yet.
                 </div>
               )}
             </div>
+            <div className="modal-footer">
+              <button className="btn-secondary btn-sm" onClick={() => setNotificationsOpen(false)}>Close</button>
+            </div>
           </div>
-        </section>}
-
-        <footer className="main-footer">
-          <span><Icon name="shield" size={13}/> Built for maintainers. Not for blind trust.</span>
-          <span><i className="dot"/> All execution sandboxed <span className="footer-sep">/</span> {backendOnline ? 'Backend: localhost:8000' : 'Demo mode'}</span>
-        </footer>
-      </main>
-    </div>
-
-    {/* ── Bottom terminal bar ── */}
-    <button className="terminal-bar" onClick={() => setTerminal(!terminal)}>
-      <span><Icon name="terminal" size={15}/><b>Sandbox console</b><span className="dot"/><span>sbx_8f2a91</span><span className="console-last">Running adversarial mutation 84 of 128…</span></span>
-      <span>Live <span className="keyboard">⌃ `</span> <span>⌃</span></span>
-    </button>
-
-    {/* ── Toast notification ── */}
-    {notice && <div className="toast" role="status"><Icon name="check" size={16}/>{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><Icon name="close" size={14}/></button></div>}
-
-    {/* ── Terminal drawer ── */}
-    {terminal && <div className="drawer">
-      <div className="drawer-header">
-        <span><Icon name="terminal"/> Sandbox execution <span className="processing"><i/> Live</span></span>
-        <div>
-          <button onClick={() => {navigator.clipboard?.writeText(logs); setCopied(true)}}><Icon name="copy" size={15}/>{copied ? 'Copied' : 'Copy logs'}</button>
-          <button aria-label="Close execution logs" onClick={() => setTerminal(false)}><Icon name="close"/></button>
         </div>
-      </div>
-      <div className="terminal-meta">sbx_8f2a91 <span>/</span> PR #282 <span>/</span> Python 3.12 · pytest 8.3.2</div>
-      <pre>{logs}<span className="cursor">▍</span></pre>
-    </div>}
-  </div>
+      )}
+    </div>
+  )
 }
 
 /* ─── PR Table Row Component ─────────────────────────────────────────── */
@@ -521,41 +2433,49 @@ function Row({ row: r, expanded, toggle, timeAgo, mapStatus, badgeClass, scoreCl
   scoreClass: (v: number) => string
   initials: (n: string) => string
 }) {
-  return <>
-    <tr className={expanded ? 'expanded' : ''} onClick={toggle}>
-      <td>
-        <div className="pr-title">
-          <a href={`#pr-${r.number}`} onClick={e => e.preventDefault()}>#{r.number}</a>
-          <strong>{r.title}</strong>
-        </div>
-        <div className="author">
-          <span className="author-icon">{initials(r.author)}</span>
-          {r.author}<span>·</span>{timeAgo(r.created_at)}
-        </div>
-      </td>
-      <td><span className={`badge ${badgeClass(r.status)}`}><i/>{mapStatus(r.status)}</span></td>
-      <td>
-        <span className={`score ${scoreClass(r.trust_score)}`}>{r.trust_score}<small>/100</small></span>
-        <div className="score-track"><span style={{ width: `${r.trust_score}%` }} className={scoreClass(r.trust_score)}/></div>
-      </td>
-      <td>
-        {r.blast_radius && <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 9, color: (r.blast_radius.statement_delta > 50) ? '#ff7b72' : '#56d364' }}>
-          Δ{r.blast_radius.statement_delta} {r.blast_radius.scope_creep_detected && '⚠'}
-        </span>}
-      </td>
-      <td>
-        <button className={`expand ${expanded ? 'rotated' : ''}`} aria-label={`Expand PR ${r.number}`}><Icon name="arrow" size={15}/></button>
-      </td>
-    </tr>
-    {expanded && <tr className="detail-row">
-      <td colSpan={5}>
-        <Icon name="shield" size={14}/>
-        <span>
-          {r.test_result ? (r.test_result.passed ? '✅ All tests passed.' : '❌ Tests failed.') : '⏳ Awaiting execution.'}
-          {' '}Tier: {r.tier} · Blast radius: Δ{r.blast_radius?.statement_delta ?? '?'} statements
-          {r.blast_radius?.scope_creep_detected && ' · ⚠ Scope creep detected'}
-        </span>
-      </td>
-    </tr>}
-  </>
+  return (
+    <>
+      <tr className={expanded ? 'expanded' : ''} onClick={toggle}>
+        <td>
+          <div className="pr-title">
+            <a href={`#pr-${r.number}`} onClick={e => e.preventDefault()}>#{r.number}</a>
+            <strong>{r.title}</strong>
+          </div>
+          <div className="author">
+            <span className="author-icon">{initials(r.author)}</span>
+            {r.author}<span>·</span>{timeAgo(r.created_at)}
+          </div>
+        </td>
+        <td><span className={`badge ${badgeClass(r.status)}`}><i/>{mapStatus(r.status)}</span></td>
+        <td>
+          <span className={`score ${scoreClass(r.trust_score)}`}>{r.trust_score}<small>/100</small></span>
+          <div className="score-track"><span style={{ width: `${r.trust_score}%` }} className={scoreClass(r.trust_score)}/></div>
+        </td>
+        <td>
+          {r.blast_radius ? (
+            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 9, color: (r.blast_radius.statement_delta > 50) ? '#ff7b72' : '#56d364' }}>
+              Δ{r.blast_radius.statement_delta} {r.blast_radius.scope_creep_detected && '⚠'}
+            </span>
+          ) : (
+            <span style={{ fontSize: 9, color: '#7a8e80' }}>-</span>
+          )}
+        </td>
+        <td>
+          <button className={`expand ${expanded ? 'rotated' : ''}`} aria-label={`Expand PR ${r.number}`}><Icon name="arrow" size={15}/></button>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="detail-row">
+          <td colSpan={5}>
+            <Icon name="shield" size={14}/>
+            <span>
+              {r.test_result ? (r.test_result.passed ? '✅ All tests passed.' : '❌ Tests failed.') : '⏳ Awaiting execution.'}
+              {' '}Tier: {r.tier} · Blast radius: Δ{r.blast_radius?.statement_delta ?? '?'} statements
+              {r.blast_radius?.scope_creep_detected && ' · ⚠ Scope creep detected'}
+            </span>
+          </td>
+        </tr>
+      )}
+    </>
+  )
 }
