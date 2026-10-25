@@ -1,0 +1,139 @@
+/* Graphite surfaces, GitHub-blue navigation, and semantic verification states. */
+:root {
+  --line: #30363d;
+  --muted: #8b949e;
+  --green: #3fb950;
+  --red: #f85149;
+}
+body { background: #0d1117; color: #e6edf3; }
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible {
+  outline-color: #58a6ff;
+}
+option { background: #161b22; }
+header { background: #010409; }
+aside { background: #0d1117; }
+.brand-icon { color: #79c0ff; }
+.beta { color: #79c0ff; border-color: #1f6feb66; background: #1f6feb15; }
+.repo, .repo select, .breadcrumbs b { color: #b1bac4; }
+.private, .model { border-color: #30363d; color: #b1bac4; }
+.model { background: #161b22; }
+.model > span { color: #a5a0ff; }
+.model small { color: #8b949e; }
+.system { color: #a6c9b0; }
+.system i, .dot { background: #3fb950; }
+.icon-button { color: #8b949e; }
+.avatar { background: #263449; color: #a5caff; }
+.me { background: #364861; color: #dbeaff; border-color: #536582; }
+.side-label, .breadcrumbs, .page-heading p, .overview-meta,
+.sidebar-bottom p, .version, .main-footer { color: #8b949e; }
+.nav-item { color: #919ba7; }
+.nav-item.selected {
+  color: #d8eaff;
+  background: #1f6feb20;
+  box-shadow: inset 2px 0 #58a6ff;
+}
+.nav-item b { color: #ffa198; background: #f8514920; }
+.nav-item small { color: #a2b1c4; background: #212a36; }
+.guard-symbol { color: #58a6ff; }
+.sidebar-bottom strong { color: #b1bac4; }
+.eyebrow { color: #79c0ff; }
+.eyebrow > span { background: #58a6ff; }
+.button { background: #21262d; border-color: #3d444d; color: #c9d1d9; }
+.button > span, .period { color: #b1bac4; }
+.metric {
+  background: linear-gradient(125deg, #182335, #141b25);
+  border-color: #303e53;
+}
+.metric-label { color: #a2b1c5; }
+.metric-label svg { color: #79c0ff; }
+.metric-value { color: #f0f6fc; }
+.spark { color: #58a6ff; }
+.metric-note { color: #8b949e; }
+.green-text { color: #56d364; }
+.red-text { color: #e3b341; }
+.metric-1 {
+  background: linear-gradient(125deg, #221b29, #181b24);
+  border-color: #3d3249;
+}
+.metric-1 .metric-label svg, .metric-1 .spark { color: #bc8cff; }
+.metric-2 {
+  background: linear-gradient(125deg, #292317, #1c1d20);
+  border-color: #4b402a;
+}
+.metric-2 .metric-label svg, .mini-shield { color: #d29922; }
+.metric-3 { background: linear-gradient(125deg, #1a2033, #161b22); border-color: #343a55; }
+.metric-3 .metric-label svg { color: #a5a0ff; }
+.metric-3 .green-text { color: #b6b0ff; border-color: #48416b; }
+.panel { background: #161b22; }
+.section-title > svg { color: #8b949e; }
+.pipeline-id { color: #b1bac4; }
+.pipeline-id > span { color: #6e7681; }
+.processing { color: #79c0ff; }
+.processing i {
+  background: #58a6ff;
+  box-shadow: 0 0 8px #58a6ff40;
+}
+.step-circle { background: #163325; color: #56d364; border-color: #2e6740; }
+.step-line { background: #2e6740; }
+.step.active .step-circle {
+  background: #172e4d;
+  border-color: #58a6ff;
+  color: #a5d6ff;
+  box-shadow: 0 0 0 4px #58a6ff12;
+}
+.step.active .step-line { background: linear-gradient(to right, #388bfd 35%, #30363d 35%); }
+.step.pending .step-circle { background: #1c2128; color: #6e7681; border-color: #3d444d; }
+.step p { color: #8b949e; }
+.step-state { color: #56d364; }
+.step.active .step-state { color: #79c0ff; }
+.step.active .step-state i { background: #58a6ff; }
+.step.pending strong, .step.pending .step-state { color: #7d8590; }
+.pipeline-footer, th { background: #11161d; color: #8b949e; }
+.pipeline-footer code, .pipeline-footer button { color: #9db7d5; }
+.footer-sep { color: #484f58; }
+.count { color: #b1bac4; background: #21262d; border-color: #3d444d; }
+.red-count { background: #3a2b15; color: #e3b341; border-color: #665124; }
+.text-button, .pr-title a { color: #79c0ff; }
+.search, .search input::placeholder, .author, .tiny-label,
+.table-bottom, .quarantine-footer, .console-last, .terminal-meta { color: #8b949e; }
+.search input { color: #c9d1d9; }
+.search kbd, .table-toolbar select { border-color: #30363d; color: #9da7b3; }
+td { border-bottom-color: #2a3039; }
+tbody tr:hover { background: #1c2531; }
+.author-icon { color: #b1c8e5; background: #2b3748; }
+.author > span:nth-child(2) { color: #6e7681; }
+.passed { background: #163325; color: #56d364; border-color: #2e5b3a; }
+.rejected { background: #3b1e23; color: #ff938a; border-color: #6c3036; }
+.review { background: #172c48; color: #79c0ff; border-color: #284f7e; }
+.good { color: #56d364; }
+.bad { color: #ff7b72; }
+.mid { color: #e3b341; }
+.score small { color: #7d8590; }
+.score-track { background: #30363d; }
+.expand { color: #8b949e; }
+.detail-row td { background: #1b2635; color: #b1c8e5; }
+.queue-notice { color: #d7ba7d; background: #292416; border-color: #443b26; }
+.queue-notice svg { color: #d29922; }
+.queue-item { border-bottom-color: #30363d; }
+.queue-person .avatar { background: #283d58; color: #a5d6ff; }
+.queue-person .avatar-1 { background: #392d50; color: #d2a8ff; }
+.queue-person .avatar-2 { background: #2f3f43; color: #a0d8d4; }
+.queue-person > div > span, .external { color: #8b949e; }
+.risk { color: #b4a385; }
+.risk > span { color: #e3b341; border-color: #80652e; }
+.queue-actions button {
+  background: #1f6feb;
+  border-color: #388bfd;
+  color: #fff;
+}
+.queue-actions button:last-child { background: #21262d; border-color: #3d444d; color: #c9d1d9; }
+.terminal-bar { background: #010409; border-top-color: #30363d; color: #8b949e; }
+.terminal-bar b { color: #c9d1d9; }
+.keyboard { border-color: #30363d; }
+.toast { background: #1b2b40; border-color: #3c6595; color: #d5e7ff; }
+.drawer { background: #0d1117; border-top-color: #388bfd; }
+.drawer-header button { color: #b1bac4; }
+.terminal-meta span { color: #484f58; }
+.drawer pre { color: #a5d6a7; }
+.cursor { color: #58a6ff; }
+.empty { color: #8b949e; }

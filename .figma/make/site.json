@@ -1,0 +1,10 @@
+{
+  "description": "Automates GitHub issue reproduction and adversarial pull request verification, helping engineering teams assess code changes, manage contributor access, and block risky merges.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
