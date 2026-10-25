@@ -64,34 +64,48 @@ When an issue is opened, GhostRepro analyzes the codebase context and uses **Gro
 
 ---
 
-## 🚀 Project Layout
+## 📁 Project Layout
 
 ```
 GhostReproMissionControlDashboard/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
-│   │   ├── main.py              # FastAPI app, CORS middleware & Webhook routes
-│   │   ├── llm_agent.py         # Groq Open-Source LPU Engine & Prompts
-│   │   ├── security.py          # Role-based user filter & PyPI Slopsquatting scanner
-│   │   ├── ast_analyzer.py      # AST Blast Radius & complexity delta calculations
+│   │   ├── main.py              # FastAPI app, live GitHub API routes & Webhook handlers
+│   │   ├── database.py          # Dual-layer SQLite persistence engine (10 relational tables)
+│   │   ├── llm_agent.py         # Groq Open-Source LPU Engine & autonomous prompts
+│   │   ├── security.py          # Role clearance & live PyPI Slopsquatting scanner
+│   │   ├── ast_analyzer.py      # AST Blast Radius & statement delta calculations
 │   │   └── sandbox.py           # Docker/Subprocess Pytest execution runner
 │   ├── demo_repo/               # Local sample repo used for testing bot workflows
 │   │   ├── checkout.py
 │   │   └── test_checkout.py
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── .env                     # GROQ_API_KEY, GROQ_MODEL, GROQ_BASE_URL
+│   └── .env                     # GROQ_API_KEY, GROQ_MODEL, GROQ_BASE_URL, GITHUB_TOKEN
 │
-├── src/                         # Mission Control Dashboard (React + TypeScript + Tailwind v4)
-│   ├── api.ts                   # Centralized typed API client + Direct Groq LPU fallback
+├── src/                         # Mission Control Dashboard (React 19 + TypeScript + Tailwind v4)
+│   ├── api.ts                   # Centralized typed API client with zero mock fallbacks
 │   ├── App.tsx                  # Dashboard interface with real-time telemetry & latency monitor
 │   ├── index.css                # Dark mode styling tokens
 │   └── main.tsx
+├── .agents/                     # Autonomous agent workflows (testing, review, screenshot)
+├── agents/                      # Companion CLI verification scripts
+├── test_live_system.py          # 18-suite, 95-check live end-to-end verification test suite
 ├── .env                         # Root environment configuration
 ├── package.json
 └── vite.config.ts
 ```
+
+---
+
+## 🛡️ Strict Zero-Mock Data Architecture
+
+GhostRepro enforces a strict **Zero-Mock Policy** throughout its frontend and backend:
+- **Real GitHub API Ingestion**: The "Fetch Open PRs from GitHub" action queries `https://api.github.com/repos/{owner}/{repo}/pulls` directly. If a repository has no open PRs, it reports an honest empty state or `404: No open pull requests found`—**it never fabricates fake contributors, fake PR titles, or fabricated blast radius deltas**.
+- **Live Official PyPI Index**: Slopsquatting detection executes real-time queries against `https://pypi.org/pypi/{pkg}/json`. It does not rely on synthetic fallback lists.
+- **Genuine LLM Telemetry**: LLM ping tests communicate live with Groq LPUs (`llama-3.3-70b-versatile`) and propagate actual network exceptions if unreachable.
+- **Relational SQLite Persistence**: All maintainer authorizations, multi-repo selections, synthesized bug repros, security flags, and execution logs persist to local SQLite (`backend/data/ghostrepro.db`).
 
 ---
 
@@ -100,9 +114,10 @@ GhostReproMissionControlDashboard/
 ### 1. Environment Configuration
 Create or review `.env` in both the project root and `backend/.env`:
 ```env
-GROQ_API_KEY=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
+GROQ_API_KEY=gsk_your_groq_api_key_here
 GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_BASE_URL=https://api.groq.com/openai/v1
+GITHUB_TOKEN=ghp_your_optional_github_token_for_higher_rate_limits
 ```
 
 ### 2. Run the FastAPI Backend
@@ -112,6 +127,7 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 *Backend API runs at: `http://127.0.0.1:8000`*
+*Health Check: `http://127.0.0.1:8000/api/health`*
 
 ### 3. Run the Mission Control Dashboard
 ```bash
@@ -119,6 +135,37 @@ npm install
 npm run dev
 ```
 *Frontend runs at: `http://localhost:8443`*
+
+---
+
+## 🧪 Comprehensive Live Test Suite
+
+GhostRepro includes a full end-to-end verification suite that validates the entire live system without any mocked responses:
+
+```bash
+# Run against the active local backend (http://127.0.0.1:8000)
+python test_live_system.py
+```
+
+### Test Suite Coverage (18 Suites / 95 Assertions):
+1. **[1/18] Backend Health & Status**: Validates `GET /api/health` and root API endpoints.
+2. **[2/18] GitHub User & Persistence**: Validates maintainer profile persistence.
+3. **[3/18] Repository Management**: Tests dynamic repository additions and SQLite storage.
+4. **[4/18] Repository Switching**: Verifies workspace target switching.
+5. **[5/18] GitHub Repository Sync**: Validates repository synchronization.
+6. **[6/18] PyPI Slopsquatting Detector**: Live network validation of real PyPI packages vs typosquats.
+7. **[7/18] Threat Registry & Whitelisting**: Verifies flagging and package whitelisting.
+8. **[8/18] AST Blast Radius Engine**: Computes statement deltas and verifies scope creep detection.
+9. **[9/18] Autonomous Bug Repro Synthesizer**: Tests Groq LPU test synthesis into RED state.
+10. **[10/18] Bug Repro Sandbox Execution**: Executes pytest in sandbox and verifies RED ──► GREEN flip.
+11. **[11/18] Bug Repro Code Retrieval**: Retrieves generated pytest code assertions.
+12. **[12/18] Issues & Reproductions List**: Tests issue listing and nonexistent issue 404 validation.
+13. **[13/18] Real GitHub PR Querying**: Validates genuine PR fetching, empty repos, and rate limits.
+14. **[14/18] Dashboard Metrics & Quarantine**: Aggregates live PR statistics and quarantine queue.
+15. **[15/18] Configuration CRUD**: Updates verification rules and minimum trust thresholds.
+16. **[16/18] Webhook Ping & Events**: Dispatches test webhook events.
+17. **[17/18] Execution Logs & Sandbox Suite**: Validates execution logging and log clearing.
+18. **[18/18] SQLite Database Physical Integrity**: Verifies all 10 schema tables and records.
 
 ---
 
@@ -133,6 +180,7 @@ npm run dev
 ---
 
 ## 🔒 Security Principles
+- **Zero Fabricated Data**: Always verify live external sources (GitHub REST API, PyPI JSON index) and never use optimistic mock data.
 - **No Untrusted Execution**: Sandbox runner enforces ephemeral execution, time limits, and non-root execution.
 - **Fail-Closed**: If PyPI is unreachable or AST parsing errors occur, contributions are quarantined rather than auto-approved.
 - **Human In The Loop**: Zero-trust access control ensures maintainers maintain absolute sovereignty over their repositories.

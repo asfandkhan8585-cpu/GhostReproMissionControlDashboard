@@ -144,7 +144,7 @@ This repository is equipped with 3 specialized agents located in `.agents/` and 
 - All connected repositories are synchronized and visible in the modal.
 - Maintainers can:
   - **Switch Active Repo**: Re-targets the entire mission control workspace.
-  - **Simulate Incoming PR**: Creates an instant test PR for that repository.
+  - **Fetch Open PRs**: Queries real open pull requests from the GitHub REST API for that repository.
   - **Connect Custom Repo**: Adds any custom repository directly to the dashboard.
 
 ### 2. Autonomous Bug Reproductions (RED ──► GREEN)
@@ -166,8 +166,21 @@ This repository is equipped with 3 specialized agents located in `.agents/` and 
 
 ---
 
-## 🛡️ Coding Standards & Guidelines
+## 🧪 Live System Verification Suite
+
+Run the comprehensive 18-suite, 95-check live end-to-end verification suite against the running local backend (`http://127.0.0.1:8000`):
+
+```bash
+python test_live_system.py
+```
+
+All 95 assertions test live HTTP routes, real GitHub PR querying, real PyPI package status, AST statement delta math, Groq LPU test generation, and SQLite relational integrity without any mock data assertions.
+
+---
+
+## 🛡️ Coding Standards & Strict Zero-Mock Guidelines
+- **Strict Zero-Mock Data Rule**: The software must **never ever** use mock or fabricated data in place of real API responses. If a repository has no open PRs or a network call fails, report the genuine state honestly (fail-closed) rather than generating synthetic items.
 - **Zero Empty Space**: Never leave blank or collapsed panels. Provide rich telemetry, actionable widgets, and responsive empty-state cards.
 - **Always Provide Feedback**: Every interactive button must trigger user feedback (toast notification, inline badge, or state update).
-- **Graceful Fail-Closed Fallbacks**: If external networks or backend services are unreachable, the UI must fall back gracefully to local reactive simulation with zero crashes.
+- **Graceful Fail-Closed Responses**: When an external network or backend service returns an error, the UI must show the exact error message and detail rather than concealing it.
 - **Preserve Types**: Use TypeScript interfaces defined in `src/api.ts` for all data structures.

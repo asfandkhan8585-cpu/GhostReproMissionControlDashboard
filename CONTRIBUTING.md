@@ -73,6 +73,16 @@ uvicorn app.main:app --reload --port 8000
 Health Check: `http://localhost:8000/api/health`
 LLM LPU Test: `http://localhost:8000/api/config/test-llm`
 
+## 🧪 Running the Live End-to-End Test Suite
+
+Before opening a pull request, run the comprehensive live verification suite against the local backend server (`http://127.0.0.1:8000`):
+
+```bash
+python test_live_system.py
+```
+
+All 95 tests must pass with 0 failures. The test suite covers health endpoints, user and repo persistence, real PyPI lookups, AST calculations, bug reproduction synthesis, pytest sandbox runs, and SQLite integrity.
+
 ---
 
 ## 🤖 Using the Autonomous Agents for Verification
@@ -102,6 +112,7 @@ GhostRepro includes 3 specialized autonomous agents located in `.agents/` and `a
 ## 🎨 UI & Design Guidelines
 
 If you are modifying the frontend Mission Control Dashboard:
+- **Strict Zero-Mock Data Policy**: The application must never fabricate mock responses. Real API endpoints must be called; if no data exists or an error occurs, report it transparently.
 - **Zero Empty Space**: Never leave blank or collapsed panels. When data lists are empty, render high-density informational widgets or fallback cards.
 - **Design System Tokens**: Use the established dark palette (`#101514`, `#121a16`, `#141c18`), green accents for verified items (`#8edaa1`, `#3fb950`), red for bug proofs and blocked slop (`#ff8a80`), and amber for quarantine (`#f1cf81`).
 - **Typography**: Use `DM Sans` for UI copy and `IBM Plex Mono` for telemetry, pytest code, statement deltas, and terminal logs.
@@ -115,10 +126,11 @@ Before submitting your PR, please verify:
 - [ ] My PR targets the `main` branch.
 - [ ] I have provided a concise description of the bug or feature.
 - [ ] No hallucinated or unverified dependencies have been introduced.
+- [ ] No mock or fabricated data is used in place of live API calls.
 - [ ] The AST blast-radius is minimal ($\Delta \le 50$ statements for bug fixes).
 - [ ] All buttons and interactive controls work without throwing console errors.
 - [ ] The dashboard views comply with the **Zero Empty Space** standard.
-- [ ] All unit and reproduction tests pass.
+- [ ] All unit, live system tests (`python test_live_system.py`), and reproduction tests pass.
 
 ---
 
