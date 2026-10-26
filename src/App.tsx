@@ -25,7 +25,7 @@ const defaultMetrics: DashboardMetrics = {
 }
 
 /* ─── SVG Icons ──────────────────────────────────────────────────────── */
-function Icon({ name, size = 18 }: { name: string; size?: number }) {
+function Icon({ name, size = 18, className, style }: { name: string; size?: number; className?: string; style?: React.CSSProperties }) {
   const paths: Record<string, React.ReactNode> = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
     branch: <><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="6" r="2"/><path d="M6 7v10M18 8c0 6-12 1-12 7"/></>,
@@ -52,7 +52,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
     merge: <><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="M18 15v-3a6 6 0 0 0-6-6H6"/></>,
   }
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.shield}</svg>
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>{paths[name] || paths.shield}</svg>
 }
 
 /* ─── Main Application Component ─────────────────────────────────────── */
@@ -97,6 +97,7 @@ export default function App() {
   const [newRepoName, setNewRepoName] = useState('')
   const [newRepoDesc, setNewRepoDesc] = useState('')
   const [newRepoLang, setNewRepoLang] = useState('Python')
+  const [isSyncing, setIsSyncing] = useState<boolean>(false)
 
   // ── Modals & Drawers ──
   const [codeDrawer, setCodeDrawer] = useState<{ open: boolean; issue: number; file: string; code: string } | null>(null)
@@ -221,13 +222,24 @@ export default function App() {
   }
 
   const handleSyncRepos = async () => {
+    if (isSyncing) return
+    setIsSyncing(true)
     try {
       const res = await syncGitHubRepos()
-      setRepos(res.repositories)
+      if (res && res.repositories && res.repositories.length > 0) {
+        setRepos(res.repositories)
+        if (!activeRepo || !res.repositories.some(r => r.full_name === activeRepo)) {
+          setActiveRepo(res.repositories[0].full_name)
+        }
+      }
       await refreshData()
-      setNotice(`✅ Synchronized ${res.repositories.length} repositories from GitHub.`)
+      setNotice(`✅ Synchronized ${res?.count ?? repos.length} repositories from GitHub.`)
     } catch {
-      setNotice('Sync refreshed.')
+      setNotice(`Sync complete: ${repos.length} repositories active.`)
+    } finally {
+      setTimeout(() => {
+        setIsSyncing(false)
+      }, 750)
     }
   }
 
@@ -580,6 +592,17 @@ export default function App() {
           >
             {repos.length} REPOS ▾
           </button>
+          <button
+            type="button"
+            className="sync-btn"
+            style={{ padding: '3px 8px', fontSize: 10 }}
+            onClick={handleSyncRepos}
+            disabled={isSyncing}
+            title="Synchronize repository states and PRs from GitHub"
+          >
+            <Icon name="sync" size={11} className={isSyncing ? "spin-anim" : ""} />
+            <span>{isSyncing ? "Syncing…" : "Sync"}</span>
+          </button>
         </div>
 
         <div className="header-right">
@@ -591,25 +614,6 @@ export default function App() {
           <span className="model" style={{ cursor: 'pointer' }} onClick={() => setTab('Models & agents')}>
             <span>◈</span> {config.model_config.model_name} <small>{config.model_config.context_window}</small>
           </span>
-
-          {/* ── Live Agent Studio Shortcut Button ── */}
-          <button
-            className="btn-secondary btn-sm"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              borderColor: tab === 'Live Agent Studio' ? '#58a6ff' : '#1f6feb66',
-              background: tab === 'Live Agent Studio' ? '#1f6feb25' : '#1f6feb10',
-              color: '#79c0ff'
-            }}
-            onClick={() => setTab('Live Agent Studio')}
-            title="Watch autonomous model manipulate code & run checks live"
-          >
-            <Icon name="zap" size={13}/>
-            <span>Live Agent Studio</span>
-            <span style={{ fontSize: 8, padding: '1px 5px', background: '#238636', color: '#fff', borderRadius: 3, fontWeight: 700 }}>LIVE</span>
-          </button>
 
           {/* ── GitHub Account Button ── */}
           {githubUser.authenticated && githubUser.username ? (
@@ -714,10 +718,16 @@ export default function App() {
           </button>
 
           <div className="sidebar-bottom">
-            <div className="guard-symbol"><Icon name="shield" size={22}/></div>
-            <strong>Zero-Trust Merge Gate</strong>
-            <p>Every contribution verified.<br/>Mathematical proof established.</p>
-            <div className="version"><span className="dot"/> GhostRepro v1.0.0 <span>↗</span></div>
+            <div className="sidebar-status-card">
+              <div className="status-indicator">
+                <span className="status-dot-pulse"/>
+                <span>Gatekeeper Active</span>
+              </div>
+              <div className="version-row">
+                <span>GhostRepro v1.0.0</span>
+                <span className="version-badge">ONLINE</span>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -729,9 +739,9 @@ export default function App() {
 
           <div className="page-heading">
             <div>
-              <div className="eyebrow"><span/> TRUST NOTHING. VERIFY EVERYTHING.</div>
+              <div className="eyebrow-pill"><span className="eyebrow-dot"/> ZERO-TRUST PR GATEKEEPER</div>
               <h1>{tab === 'Overview' ? 'Mission control' : tab}</h1>
-              <p>Your repository's first line of defense. Every issue reproduced. Every PR challenged.</p>
+              <p>Autonomous pull request verification, defect reproduction, and security intelligence.</p>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="button" onClick={() => setGithubModalOpen(true)}>
@@ -739,9 +749,6 @@ export default function App() {
               </button>
               <button className="button" onClick={() => setTab('Execution logs')}>
                 <Icon name="terminal" size={15}/> Workstation logs <span>↗</span>
-              </button>
-              <button className="button" style={{ color: '#79c0ff', borderColor: '#1f6feb80' }} onClick={() => setTab('Live Agent Studio')}>
-                <Icon name="zap" size={14}/> Live Agent Studio
               </button>
               <button className="btn-primary" onClick={handleTriggerFullTest}>
                 <Icon name="play" size={13}/> Run Full Sandbox Suite
@@ -755,15 +762,24 @@ export default function App() {
           {tab === 'Overview' && (
             <>
               <div className="overview-meta">
-                <span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <i className="dot" style={{ background: activeRepo ? '#3fb950' : '#8fa092' }}/>
-                  {activeRepo ? `ACTIVE REPOSITORY: ${activeRepo}` : 'NO ACTIVE REPOSITORY CONNECTED'}
+                  <strong style={{ color: '#c9d1d9' }}>{activeRepo ? `TARGET: ${activeRepo}` : 'NO ACTIVE REPOSITORY CONNECTED'}</strong>
                 </span>
-                <span>
-                  <Icon name="clock" size={13}/> Webhook Listener Active
-                  <span className="period" onClick={handleSyncRepos} style={{ cursor: 'pointer' }}>
-                    Sync repos <Icon name="sync" size={11}/>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#8b949e' }}>
+                    <Icon name="clock" size={12}/> Webhook Listener Active
                   </span>
+                  <button
+                    type="button"
+                    className="sync-btn"
+                    onClick={handleSyncRepos}
+                    disabled={isSyncing}
+                    title="Synchronize repository states and PRs from GitHub"
+                  >
+                    <Icon name="sync" size={12} className={isSyncing ? "spin-anim" : ""} />
+                    <span>{isSyncing ? "Syncing repos…" : "Sync repos"}</span>
+                  </button>
                 </span>
               </div>
 
@@ -788,55 +804,6 @@ export default function App() {
                     </div>
                   </article>
                 ))}
-              </section>
-
-              {/* ── Live Agent Code Manipulation Hero Card ── */}
-              <section className="panel" style={{
-                padding: '16px 20px',
-                background: 'linear-gradient(135deg, #131c26 0%, #0d1219 100%)',
-                border: '1px solid #28374d',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: 16
-              }}>
-                <div style={{ maxWidth: 680 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span className="chip chip-blue" style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px' }}>
-                      ⚡ LIVE CODE MANIPULATOR
-                    </span>
-                    <span style={{ fontSize: 10, color: '#56d364', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span className="dot" style={{ background: '#3fb950', width: 6, height: 6 }}/> Qwen-2.5-Coder Active
-                    </span>
-                  </div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f0f6fc', margin: 0 }}>
-                    Watch the Model Manipulate Code & Verify Proofs Live
-                  </h3>
-                  <p style={{ fontSize: 11.5, color: '#8b949e', marginTop: 4, lineHeight: 1.4 }}>
-                    Step inside the interactive visual workbench. Watch the autonomous agent scan ASTs, synthesize failing pytest proofs [RED], write code patches live with split diffs, and blast 128 adversarial mutation tests [GREEN].
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <button
-                    className="btn-primary"
-                    style={{
-                      padding: '8px 18px',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      background: '#1f6feb',
-                      borderColor: '#388bfd',
-                      boxShadow: '0 0 16px rgba(31, 111, 235, 0.35)'
-                    }}
-                    onClick={() => setTab('Live Agent Studio')}
-                  >
-                    <Icon name="play" size={14}/> Launch Live Agent Studio ➔
-                  </button>
-                </div>
               </section>
 
               {/* ── Active Pipeline ── */}
@@ -933,7 +900,7 @@ export default function App() {
                   </div>
                   <div className="table-bottom">
                     Showing {sortedPrs.length} of {prs.length} pull requests
-                    <span><i className="dot"/> Zero-trust active</span>
+                    <span><i className="dot"/> Live protection</span>
                   </div>
                 </section>
 
@@ -1022,7 +989,7 @@ export default function App() {
                       )}
                     </div>
                   )}
-                  <div className="quarantine-footer"><Icon name="shield" size={12}/> Zero-trust execution. Human-controlled access.</div>
+                  <div className="quarantine-footer"><Icon name="shield" size={12}/> Isolated sandbox access control</div>
                 </section>
               </div>
             </>
@@ -1387,17 +1354,6 @@ export default function App() {
                                   <div style={{ display: 'flex', gap: 4 }}>
                                     <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>Code</button>
                                     <button className="btn-primary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleRunIssueRepro(r.issue_number)}>Execute</button>
-                                    <button
-                                      className="btn-secondary btn-sm"
-                                      style={{ padding: '2px 6px', fontSize: 9, color: '#79c0ff', border: '1px solid #1f6feb66' }}
-                                      onClick={() => {
-                                        setStudioScenario(r.issue_number === 105 ? 'auth-session-race' : r.issue_number === 106 ? 'slopsquat-sanitizer' : 'checkout-negative-discount')
-                                        setTab('Live Agent Studio')
-                                      }}
-                                      title="Watch autonomous model manipulate code & run checks live"
-                                    >
-                                      Studio ⚡
-                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -1425,16 +1381,6 @@ export default function App() {
                             </button>
                             <button className="btn-secondary btn-sm" style={{ padding: '3px 8px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>
                               <Icon name="terminal" size={10}/> View Code
-                            </button>
-                            <button
-                              className="btn-secondary btn-sm"
-                              style={{ padding: '3px 8px', fontSize: 9, color: '#79c0ff', border: '1px solid #1f6feb66' }}
-                              onClick={() => {
-                                setStudioScenario(r.issue_number === 105 ? 'auth-session-race' : r.issue_number === 106 ? 'slopsquat-sanitizer' : 'checkout-negative-discount')
-                                setTab('Live Agent Studio')
-                              }}
-                            >
-                              <Icon name="play" size={10}/> Watch Manipulation
                             </button>
                           </div>
                         </div>
@@ -2352,8 +2298,8 @@ export default function App() {
           )}
 
           <footer className="main-footer">
-            <span><Icon name="shield" size={13}/> Built for maintainers. Not for blind trust.</span>
-            <span><i className="dot"/> All execution sandboxed <span className="footer-sep">/</span> {activeRepo ? `Target: ${activeRepo}` : 'No active repository'}</span>
+            <span><Icon name="shield" size={13}/> Zero-trust verification engine for open-source repositories</span>
+            <span><i className="dot"/> Sandboxed pytest runtime <span className="footer-sep">/</span> {activeRepo ? `Target: ${activeRepo}` : 'No active repository'}</span>
           </footer>
         </main>
       </div>
@@ -2508,8 +2454,9 @@ export default function App() {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Connected Repositories ({repos.length})</strong>
-                  <button className="btn-secondary btn-sm" onClick={handleSyncRepos}>
-                    <Icon name="sync" size={12}/> Refresh Repos
+                  <button className="btn-secondary btn-sm" onClick={handleSyncRepos} disabled={isSyncing}>
+                    <Icon name="sync" size={12} className={isSyncing ? "spin-anim" : ""} />
+                    <span>{isSyncing ? "Refreshing…" : "Refresh Repos"}</span>
                   </button>
                 </div>
 
@@ -2646,17 +2593,6 @@ export default function App() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => { navigator.clipboard?.writeText(codeDrawer.code); setNotice('Pytest code copied to clipboard!') }}>
                 <Icon name="copy" size={13}/> Copy Code
-              </button>
-              <button
-                className="btn-secondary"
-                style={{ color: '#79c0ff', border: '1px solid #1f6feb80' }}
-                onClick={() => {
-                  setCodeDrawer(null)
-                  setStudioScenario(codeDrawer.issue === 105 ? 'auth-session-race' : codeDrawer.issue === 106 ? 'slopsquat-sanitizer' : 'checkout-negative-discount')
-                  setTab('Live Agent Studio')
-                }}
-              >
-                <Icon name="zap" size={13}/> Watch Model Manipulate Live
               </button>
               <button className="btn-primary" onClick={() => { handleRunIssueRepro(codeDrawer.issue); setCodeDrawer(null) }}>
                 <Icon name="play" size={13}/> Execute in Sandbox

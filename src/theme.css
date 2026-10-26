@@ -122,18 +122,224 @@ tbody tr:hover { background: #1c2531; }
 .risk { color: #b4a385; }
 .risk > span { color: #e3b341; border-color: #80652e; }
 .queue-actions button {
-  background: #1f6feb;
-  border-color: #388bfd;
+  background: #238636;
+  border: 1px solid #2ea043;
   color: #fff;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.15s ease;
 }
-.queue-actions button:last-child { background: #21262d; border-color: #3d444d; color: #c9d1d9; }
-.terminal-bar { background: #010409; border-top-color: #30363d; color: #8b949e; }
+.queue-actions button:hover {
+  background: #2ea043;
+  transform: translateY(-1px);
+}
+.queue-actions button:last-child {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+.queue-actions button:last-child:hover {
+  background: #30363d;
+  color: #f0f6fc;
+}
+.terminal-bar { background: #090d13; border-top-color: #21262d; color: #8b949e; }
 .terminal-bar b { color: #c9d1d9; }
 .keyboard { border-color: #30363d; }
-.toast { background: #1b2b40; border-color: #3c6595; color: #d5e7ff; }
+.toast {
+  background: #161f2e;
+  border: 1px solid #388bfd40;
+  color: #e6edf3;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+}
 .drawer { background: #0d1117; border-top-color: #388bfd; }
 .drawer-header button { color: #b1bac4; }
 .terminal-meta span { color: #484f58; }
-.drawer pre { color: #a5d6a7; }
+.drawer pre { color: #7ee787; }
 .cursor { color: #58a6ff; }
 .empty { color: #8b949e; }
+
+/* ─── Soft Interactive System Polish & Micro-Interactions ─── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-anim {
+  animation: spin 0.8s linear infinite !important;
+  display: inline-block;
+  transform-origin: center center;
+}
+
+.sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #79c0ff;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+.sync-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #a5d6ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.2);
+}
+.sync-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+.sync-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Modern Soft Buttons */
+.btn-primary {
+  background: linear-gradient(180deg, #238636 0%, #1f732f 100%) !important;
+  border: 1px solid #2ea043 !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #2ea043 0%, #238636 100%) !important;
+  border-color: #3fb950 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(35, 134, 54, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+.btn-secondary {
+  background: #21262d !important;
+  border: 1px solid #30363d !important;
+  color: #c9d1d9 !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #30363d !important;
+  border-color: #484f58 !important;
+  color: #f0f6fc !important;
+  transform: translateY(-1px) !important;
+}
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+.btn-danger {
+  background: linear-gradient(180deg, #da3633 0%, #b62324 100%) !important;
+  border: 1px solid #f85149 !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.btn-danger:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f85149 0%, #da3633 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(218, 54, 51, 0.35) !important;
+}
+
+.button {
+  border-radius: 6px !important;
+  transition: all 0.18s ease !important;
+}
+.button:hover {
+  background: #30363d !important;
+  border-color: #484f58 !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Soft Eyebrow & Status Elements */
+.eyebrow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  color: #79c0ff;
+  font: 7.5px 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+.eyebrow-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 6px #3fb95080;
+}
+
+/* Sidebar Status Widget */
+.sidebar-status-card {
+  padding: 8px 10px;
+  background: rgba(22, 27, 34, 0.7);
+  border: 1px solid rgba(48, 54, 61, 0.6);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #c9d1d9;
+}
+.status-dot-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 6px #3fb950;
+}
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: 8px 'IBM Plex Mono', monospace;
+  color: #8b949e;
+}
+.version-badge {
+  font-size: 7px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(88, 166, 255, 0.15);
+  color: #79c0ff;
+  font-weight: 700;
+}
+
+/* Modal Content Soft Glass Lift */
+.modal-content {
+  border-radius: 10px !important;
+  border: 1px solid #30363d !important;
+  background: #161b22 !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75) !important;
+}
+.modal-header {
+  background: #0d1117 !important;
+  border-bottom: 1px solid #30363d !important;
+}
+.modal-footer {
+  background: #0d1117 !important;
+  border-top: 1px solid #30363d !important;
+}
+
