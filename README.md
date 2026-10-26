@@ -26,7 +26,7 @@ By combining **AST blast-radius statement analysis**, **real-time PyPI slopsquat
 - **Track 1: AI & Intelligent Applications**: Autonomous synthesis of standalone pytest reproductions from raw GitHub issues, followed by 128 adversarial mutation checks using sub-second Groq LPUs to destroy hardcoded cheat PRs.
 - **Track 2: Developer Tools & Open-Source Infrastructure**: A zero-trust clearance gatekeeper for GitHub workflows, quarantining untrusted bots and first-time contributors while fast-tracking verified maintainers.
 
----
+----
 
 ## 🛑 The Problem Statement: The Crisis in Modern Open Source
 
@@ -39,7 +39,7 @@ Open source maintainership is reaching a critical breaking point. With the ubiqu
 
 > **GhostRepro's Core Thesis**: Never trust cosmetic PR descriptions or naive CI green checkmarks. Require autonomous bug reproduction, blast-radius bounds, and dynamic mathematical verification.
 
----
+----
 
 ## 🏛️ System Architecture: The 4 Security Pillars
 
