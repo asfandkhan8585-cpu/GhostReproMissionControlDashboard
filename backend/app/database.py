@@ -494,3 +494,23 @@ def get_full_config() -> dict | None:
             if r["config_json"]:
                 res[r["section"]] = json.loads(r["config_json"])
         return res
+
+
+def clear_all_logs():
+    """Removes all stored logs from execution_logs table."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM execution_logs")
+
+
+def clear_transient_tables():
+    """Purges transient demo/runtime state from database while preserving users and repositories."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pull_requests")
+        cursor.execute("DELETE FROM pipeline_events")
+        cursor.execute("DELETE FROM slop_flags")
+        cursor.execute("DELETE FROM package_whitelist")
+        cursor.execute("DELETE FROM bug_reproductions")
+        cursor.execute("DELETE FROM execution_logs")
+

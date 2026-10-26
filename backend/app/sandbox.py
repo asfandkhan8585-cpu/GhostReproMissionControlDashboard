@@ -87,25 +87,34 @@ def run_pytest_sandbox(test_file_path: str) -> dict:
 
     # 3. Sanitize environment
     clean_env = sanitize_sandbox_env()
+    # Ensure PYTHONPATH includes test directory and project roots so imports resolve in temp cwd
+    clean_env["PYTHONPATH"] = os.pathsep.join([
+        str(resolved.parent),
+        str(ALLOWED_ROOTS[0]),
+        str(ALLOWED_ROOTS[1]),
+        clean_env.get("PYTHONPATH", "")
+    ]).strip(os.pathsep)
 
-    # 4. Execute with sys.executable -m pytest
+    # 4. Execute with sys.executable -m pytest inside an isolated temporary directory cwd
     cmd = [sys.executable, "-m", "pytest", str(resolved), "--tb=short", "-v"]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            env=clean_env,
-            cwd=str(ALLOWED_ROOTS[1]),
-        )
-        output = (result.stdout + "\n" + result.stderr).strip()
-        return {
-            "exit_code": result.returncode,
-            "passed": result.returncode == 0,
-            "output": output,
-        }
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="ghostrepro_sbx_") as temp_cwd:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env=clean_env,
+                cwd=temp_cwd,
+            )
+            output = (result.stdout + "\n" + result.stderr).strip()
+            return {
+                "exit_code": result.returncode,
+                "passed": result.returncode == 0,
+                "output": output,
+            }
     except subprocess.TimeoutExpired:
         return {
             "exit_code": -1,

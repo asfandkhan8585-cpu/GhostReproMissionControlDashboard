@@ -19,6 +19,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
+__test__ = False
 BASE_URL = "http://127.0.0.1:8000"
 
 passed = 0
@@ -177,6 +178,7 @@ def run_all_tests():
         "issue_number": 9999,
         "title": "Memory leak upon websocket drop",
         "description": "WebSocket connections are not cleaned up on disconnect",
+        "code": "import pytest\n\ndef test_repro_issue_9999():\n    assert False, 'RED: WebSocket connection leaked on disconnect.'\n"
     })
     test("Bug repro created successfully", repro_res.get("status") == "created")
     repro = repro_res.get("issue", {})
@@ -190,11 +192,8 @@ def run_all_tests():
     run_res = req("/api/dashboard/issues/9999/run", method="POST")
     test("Run returns success", run_res.get("status") == "success")
     test("Run returns correct issue number", run_res.get("issue_number") == 9999)
-    test("Run flips status from RED to GREEN", run_res.get("repro_status") == "GREEN")
-
-    # Run again to flip back
-    run_res2 = req("/api/dashboard/issues/9999/run", method="POST")
-    test("Second run flips back to RED", run_res2.get("repro_status") == "RED")
+    test("Run executes sandbox and proves bug (exit code 1 -> RED)", run_res.get("exit_code") == 1 and run_res.get("repro_status") == "RED")
+    test("Run output contains pytest assertion failure", "AssertionError" in run_res.get("output", ""))
 
     # ─── 11. Bug Reproduction Code Retrieval ─────────────────────────────
     print("\n[11/18] Bug Reproduction Code Retrieval")

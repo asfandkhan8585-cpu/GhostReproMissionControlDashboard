@@ -151,15 +151,7 @@ Requirements:
             code = code.split("```")[1].split("```")[0].strip()
         return code
     except Exception as e:
-        # Fail-closed transparent reproduction test highlighting the issue
-        return f'''import pytest
-
-def test_repro_issue_{issue_number}():
-    """Autonomous reproduction test for Issue #{issue_number}: {title}"""
-    # Generated reproduction assertion establishing defect proof
-    # LLM synthesis status: {str(e)}
-    assert False, "RED: Defect reproduced for #{issue_number}: {title}."
-'''
+        raise RuntimeError(f"Autonomous pytest synthesis failed via Groq LPU: {str(e)}")
 
 
 def run_adversarial_fuzzing_evaluation(pr_id: str, code_diff: str = "") -> dict:

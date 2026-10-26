@@ -32,7 +32,7 @@ from app.database import (
     save_slop_flag, get_all_slop_flags, delete_slop_flag,
     add_to_whitelist, get_whitelist, remove_from_whitelist,
     save_pipeline_event, get_pipeline_events,
-    save_log, get_recent_logs,
+    save_log, get_recent_logs, clear_all_logs, clear_transient_tables,
     save_config, get_config, get_full_config
 )
 
@@ -41,9 +41,18 @@ load_dotenv()
 app = FastAPI(title="GhostRepro API", version="1.0.0")
 
 # ─── CORS ────────────────────────────────────────────────────────────────────
+_default_dev_origins = [
+    "http://localhost:8443",
+    "http://localhost:5173",
+    "http://127.0.0.1:8443",
+    "http://127.0.0.1:5173",
+]
+_env_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+ALLOWED_ORIGINS = _env_origins if _env_origins else _default_dev_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -120,7 +129,7 @@ _config = {
     },
     "repo_settings": {
         "webhook_url": "http://127.0.0.1:8000/webhook",
-        "webhook_secret": os.getenv("WEBHOOK_SECRET", "whsec_ghostrepro_rotated_secret"),
+        "webhook_secret": os.getenv("WEBHOOK_SECRET", ""),
         "auto_merge_on_pass": False,
         "sandbox_timeout_sec": 30,
         "quarantine_unverified_bots": True,
@@ -843,9 +852,22 @@ class CreateIssueReproRequest(BaseModel):
     issue_number: int
     title: str
     description: Optional[str] = ""
+    code: Optional[str] = None
 
 @app.post("/api/dashboard/issues/create")
 def create_issue_repro(req: CreateIssueReproRequest):
+    # Obtain authentic test code: from request or via Groq synthesis
+    if req.code and req.code.strip():
+        code = req.code.strip()
+    else:
+        try:
+            code = synthesize_pytest_reproduction(req.issue_number, req.title, req.description or "")
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Autonomous test synthesis failed via Groq LPU: {str(e)}"
+            )
+
     new_issue = {
         "issue_number": req.issue_number,
         "repo": _active_repo or "primary-repo",
@@ -853,13 +875,10 @@ def create_issue_repro(req: CreateIssueReproRequest):
         "repro_status": "RED",
         "test_file": f"test_repro_{req.issue_number}.py",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "code": code,
     }
     _issue_repros.insert(0, new_issue)
-    
-    # Synthesize standalone pytest test case using Groq LPU
-    code = synthesize_pytest_reproduction(req.issue_number, req.title, req.description or "")
     _repro_code_samples[req.issue_number] = code
-    new_issue["code"] = code
     
     # Save to SQLite database
     save_bug_repro(new_issue)
@@ -869,7 +888,7 @@ def create_issue_repro(req: CreateIssueReproRequest):
         "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "stage": "REPRO_TEST",
         "level": "INFO",
-        "message": f"Autonomous BRT generated for #{req.issue_number}: test_repro_{req.issue_number}.py [RED] via Groq LPU (saved to SQLite).",
+        "message": f"Autonomous BRT generated for #{req.issue_number}: test_repro_{req.issue_number}.py [RED] (saved to SQLite).",
     })
     return {"status": "created", "issue": new_issue}
 
@@ -880,15 +899,13 @@ def run_issue_repro(issue_number: int):
     if not target_issue:
         raise HTTPException(status_code=404, detail="Issue reproduction not found")
 
-    # Get test code from sample cache, database, or default failure proof
+    # Get test code from sample cache, database, or stored repro
     code = target_issue.get("code") or _repro_code_samples.get(issue_number)
     if not code:
-        code = f'''import pytest
-
-def test_repro_issue_{issue_number}():
-    """Autonomous reproduction test for Issue #{issue_number}"""
-    assert False, "RED: Defect reproduced for #{issue_number}."
-'''
+        raise HTTPException(
+            status_code=404,
+            detail=f"No pytest reproduction code found for Issue #{issue_number}. Please synthesize or provide reproduction code first."
+        )
 
     # Ensure tests directory exists inside sandbox boundary
     test_dir = Path(__file__).resolve().parent.parent / "tests" / "repros"
@@ -898,7 +915,17 @@ def test_repro_issue_{issue_number}():
 
     # Execute REAL sandbox run
     res = run_pytest_sandbox(str(test_file_path))
-    new_status = "GREEN" if res["passed"] else "RED"
+    if res["exit_code"] == 0:
+        new_status = "GREEN"
+    elif res["exit_code"] == 1:
+        new_status = "RED"
+    else:
+        # Do not flip status on execution error/timeout/crash
+        raise HTTPException(
+            status_code=500,
+            detail=f"Sandbox execution error (exit code {res['exit_code']}): {res.get('output', 'Sandbox subprocess failed')}"
+        )
+
     target_issue["repro_status"] = new_status
     target_issue["test_file"] = f"test_repro_{issue_number}.py"
     target_issue["code"] = code
@@ -935,7 +962,10 @@ def test_repro_issue_{issue_number}():
 
 @app.get("/api/dashboard/issues/{issue_number}/code")
 def get_issue_repro_code(issue_number: int):
-    code = _repro_code_samples.get(issue_number, f'''import pytest\n\ndef test_repro_{issue_number}():\n    assert True\n''')
+    target = next((i for i in _issue_repros if i["issue_number"] == issue_number), None)
+    code = (target.get("code") if target else None) or _repro_code_samples.get(issue_number)
+    if not code:
+        raise HTTPException(status_code=404, detail=f"No reproduction code found for Issue #{issue_number}")
     return {"issue_number": issue_number, "test_file": f"test_repro_{issue_number}.py", "code": code}
 
 
@@ -1114,6 +1144,7 @@ def get_execution_logs():
 def clear_execution_logs():
     global _execution_logs
     _execution_logs = []
+    clear_all_logs()
     return {"status": "cleared"}
 
 @app.post("/api/dashboard/reset")
@@ -1127,6 +1158,7 @@ def reset_dashboard_data():
     _repro_code_samples = {}
     _execution_logs = []
     _whitelisted_packages = []
+    clear_transient_tables()
     
     # Reload from SQLite or preserve maintainer default
     _db_repos = get_all_repositories()
@@ -1186,15 +1218,14 @@ def trigger_full_test_suite(req: SandboxTriggerRequest):
     ]
     test_path = next((p for p in candidate_test_paths if os.path.exists(p)), None)
     
-    # Execute REAL pytest sandbox
-    if test_path:
-        test_result = run_pytest_sandbox(test_path)
-    else:
-        test_result = {
-            "passed": False,
-            "exit_code": 1,
-            "output": "Error: No candidate test file found on disk (demo_repo/test_checkout.py not found)."
-        }
+    # Execute REAL pytest sandbox - return 404 if no test file found
+    if not test_path:
+        raise HTTPException(
+            status_code=404,
+            detail="No candidate test file found on disk (demo_repo/test_checkout.py not found)."
+        )
+
+    test_result = run_pytest_sandbox(test_path)
 
     # Execute REAL Qwen adversarial fuzzing evaluation
     fuzzing_res = run_adversarial_fuzzing_evaluation(
