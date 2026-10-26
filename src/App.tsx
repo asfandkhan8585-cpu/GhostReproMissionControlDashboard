@@ -10,7 +10,7 @@ import {
   createIssueRepro, runIssueRepro, getIssueReproCode,
   scanPackage, whitelistPackage, deleteSlopsquat, autoScanRepoDependencies,
   getExecutionLogs, clearExecutionLogs, triggerSandboxSuite,
-  simulatePR, resetAllData,
+  simulatePR, resetAllData, checkHealth, regenerateWebhookSecret,
   initialConfig, initialGitHubUser, initialRepos, initialPRs,
   initialEvents, initialRepros, initialSlopFlags, initialWhitelist,
   initialLogs, type DashboardMetrics, type PRRecord, type PipelineEvent,
@@ -150,6 +150,14 @@ export default function App() {
   // ── Refresh Data from Backend ──
   const refreshData = useCallback(async () => {
     try {
+      await checkHealth()
+      setBackendOnline(true)
+    } catch {
+      setBackendOnline(false)
+      return
+    }
+
+    try {
       const [m, p, q, e, r, s, w, l, u, repList, cfg] = await Promise.all([
         getMetrics(), getPRs(), getQuarantine(),
         getPipelineEvents(), getIssueRepros(), getSlopsquatFlags(),
@@ -162,22 +170,19 @@ export default function App() {
       if (e) setEvents(e)
       if (r) setRepros(r)
       if (s) setSlopFlags(s)
-      if (w?.length) setWhitelist(w)
+      if (Array.isArray(w)) setWhitelist(w)
       if (l) setExecutionLogs(l)
       if (u) {
         setGithubUser(u)
-        if (!githubUsernameInput && u.username) {
-          setGithubUsernameInput(u.username)
-        }
+        setGithubUsernameInput(prev => prev || u.username)
       }
       if (repList?.repositories) setRepos(repList.repositories)
       if (repList?.active_repo) setActiveRepo(repList.active_repo)
       if (cfg) setConfig(cfg)
-      setBackendOnline(true)
     } catch {
-      setBackendOnline(false)
+      // Backend request error
     }
-  }, [githubUsernameInput])
+  }, [])
 
   useEffect(() => {
     refreshData()
@@ -205,8 +210,8 @@ export default function App() {
       await refreshData()
       setNotice(`✅ Authorized as @${res.user.username}. ${res.repos.length} repositories ready!`)
       setGithubModalOpen(false)
-    } catch {
-      setNotice('GitHub authorization completed.')
+    } catch (err: any) {
+      setNotice(`❌ GitHub authorization failed: ${err.message || 'Check username and PAT.'}`)
     }
   }
 
@@ -217,8 +222,8 @@ export default function App() {
       setActiveRepo(res.active_repo)
       await refreshData()
       setNotice(`Active repository switched to: ${res.active_repo}`)
-    } catch {
-      setNotice('Switched active repository.')
+    } catch (err: any) {
+      setNotice(`❌ Repository switch failed: ${err.message || 'Repository not found.'}`)
     }
   }
 
@@ -261,8 +266,8 @@ export default function App() {
       setNewRepoName('')
       setNewRepoDesc('')
       setNotice(`✅ Repository "${created.full_name}" added to Mission Control!`)
-    } catch {
-      setNotice('Failed to add custom repository.')
+    } catch (err: any) {
+      setNotice(`❌ Failed to add custom repository: ${err?.message || 'Server error.'}`)
     }
   }
 
@@ -305,8 +310,8 @@ export default function App() {
       setGithubUser(initialGitHubUser)
       setMetrics(defaultMetrics)
       setNotice('All data wiped. Clean zero-trust state restored.')
-    } catch {
-      setNotice('State reset to clean defaults.')
+    } catch (err: any) {
+      setNotice(`❌ Data reset failed: ${err?.message || 'Server error.'}`)
     }
   }
 
@@ -372,8 +377,8 @@ export default function App() {
       setAutoScanResults(res.results || [])
       await refreshData()
       setNotice(`✅ Auto-scan complete: ${res.scanned_count} packages verified against PyPI. ${res.threats_count} threat(s) flagged.`)
-    } catch {
-      setNotice('Auto-scan completed.')
+    } catch (err: any) {
+      setNotice(`❌ Auto-scan failed: ${err?.message || 'Server error scanning dependencies.'}`)
     } finally {
       setAutoScanning(false)
     }
@@ -388,8 +393,8 @@ export default function App() {
       if (scanResult && scanResult.package.toLowerCase() === pkg.toLowerCase()) {
         setScanResult({ ...scanResult, status: 'WHITELISTED', is_threat: false, message: `'${pkg}' is in maintainer whitelist.` })
       }
-    } catch {
-      setNotice(`Whitelisted ${pkg}.`)
+    } catch (err: any) {
+      setNotice(`❌ Failed to whitelist "${pkg}": ${err?.message || 'Server error.'}`)
     }
   }
 
@@ -405,8 +410,8 @@ export default function App() {
       await deleteSlopsquat(pkg)
       await refreshData()
       setNotice(`Threat flag dismissed for "${pkg}".`)
-    } catch {
-      setNotice(`Dismissed flag for ${pkg}.`)
+    } catch (err: any) {
+      setNotice(`❌ Failed to dismiss threat flag for "${pkg}": ${err?.message || 'Server error.'}`)
     }
   }
 
@@ -415,8 +420,8 @@ export default function App() {
       const res = await runIssueRepro(issueNumber)
       await refreshData()
       setNotice(`⚡ Sandbox execution for Issue #${issueNumber}: Status [${res.repro_status}].`)
-    } catch {
-      setNotice(`Ran reproduction test #${issueNumber}.`)
+    } catch (err: any) {
+      setNotice(`❌ Failed to run reproduction test #${issueNumber}: ${err?.message || 'Execution error.'}`)
     }
   }
 
@@ -424,8 +429,8 @@ export default function App() {
     try {
       const data = await getIssueReproCode(issueNumber)
       setCodeDrawer({ open: true, issue: issueNumber, file: data.test_file, code: data.code })
-    } catch {
-      setNotice(`Could not fetch test code for #${issueNumber}.`)
+    } catch (err: any) {
+      setNotice(`❌ Could not fetch test code for #${issueNumber}: ${err?.message || 'File not found.'}`)
     }
   }
 
@@ -439,8 +444,8 @@ export default function App() {
       setNewReproModalOpen(false)
       setNewIssueTitle('')
       setNewIssueNumber(prev => prev + 1)
-    } catch {
-      setNotice(`Created bug reproduction #${newIssueNumber}.`)
+    } catch (err: any) {
+      setNotice(`❌ Failed to synthesize reproduction #${newIssueNumber}: ${err?.message || 'Inference error.'}`)
     }
   }
 
@@ -453,8 +458,8 @@ export default function App() {
       await refreshData()
       setNotice(`Autonomous BRT generated for #${nextNum}: test_repro_${nextNum}.py [RED].`)
       setQuickIssueTitle('')
-    } catch {
-      setNotice('Reproduction test created.')
+    } catch (err: any) {
+      setNotice(`❌ Failed to synthesize reproduction: ${err?.message || 'Inference error.'}`)
     }
   }
 
@@ -464,8 +469,8 @@ export default function App() {
       const res = await calculateAST(astOriginal, astModified)
       setAstResult(res)
       setNotice(`AST Blast Radius calculated: Δ${res.statement_delta} statements. Scope Creep: ${res.scope_creep_detected ? 'DETECTED' : 'CLEAN'}`)
-    } catch {
-      setNotice('AST calculation completed.')
+    } catch (err: any) {
+      setNotice(`❌ AST calculation failed: ${err?.message || 'Analysis error.'}`)
     }
     setAstCalculating(false)
   }
@@ -486,8 +491,8 @@ export default function App() {
     try {
       await clearExecutionLogs()
       setNotice('Execution logs console cleared.')
-    } catch {
-      setNotice('Logs cleared.')
+    } catch (err: any) {
+      setNotice(`❌ Failed to clear server logs: ${err?.message || 'Server error.'}`)
     }
   }
 
@@ -500,10 +505,8 @@ export default function App() {
       setSavedSuccessSection(section)
       setTimeout(() => setSavedSuccessSection(null), 3500)
       setNotice(`✅ Configuration saved successfully for ${section.replace('_', ' ')}!`)
-    } catch {
-      setNotice('Configuration saved to local profile.')
-      setSavedSuccessSection(section)
-      setTimeout(() => setSavedSuccessSection(null), 3500)
+    } catch (err: any) {
+      setNotice(`❌ Failed to save configuration: ${err?.message || 'Validation error.'}`)
     }
     setCfgSaving(false)
   }
@@ -526,8 +529,8 @@ export default function App() {
       const res = await pingWebhook()
       await refreshData()
       setNotice(`✅ Webhook Ping Delivered: ${res.event.message}`)
-    } catch {
-      setNotice(`✅ Webhook ping verified at ${config.repo_settings.webhook_url} (HTTP 200).`)
+    } catch (err: any) {
+      setNotice(`❌ Webhook ping failed: ${err?.message || 'Endpoint unreachable.'}`)
     }
   }
 
@@ -1864,10 +1867,17 @@ export default function App() {
                             })}
                             style={{ flex: 1 }}
                           />
-                          <button className="btn-secondary btn-sm" onClick={() => {
-                            const newSec = `whsec_${Math.random().toString(36).substring(2, 15)}`
-                            setConfig({ ...config, repo_settings: { ...config.repo_settings, webhook_secret: newSec } })
-                            setNotice('New webhook secret generated.')
+                          <button className="btn-secondary btn-sm" onClick={async () => {
+                            try {
+                              const res = await regenerateWebhookSecret()
+                              setConfig(prev => ({
+                                ...prev,
+                                repo_settings: { ...prev.repo_settings, webhook_secret: res.webhook_secret }
+                              }))
+                              setNotice('✅ Cryptographically secure webhook secret generated and saved.')
+                            } catch (err: any) {
+                              setNotice(`❌ Failed to regenerate secret: ${err?.message || 'Server error'}`)
+                            }
                           }}>
                             Regen
                           </button>

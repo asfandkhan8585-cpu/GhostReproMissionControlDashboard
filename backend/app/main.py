@@ -529,6 +529,26 @@ def ping_webhook():
     return {"status": "pong" if is_success else "error", "http_status": http_code, "event": evt, "message": msg}
 
 
+@app.post("/api/config/regenerate-secret")
+def regenerate_webhook_secret():
+    """Generates a cryptographically secure webhook secret and persists it to SQLite."""
+    import secrets
+    new_secret = f"whsec_{secrets.token_hex(16)}"
+    _config["repo_settings"]["webhook_secret"] = new_secret
+    save_config("repo_settings", _config["repo_settings"])
+    
+    log_item = {
+        "id": f"log-{uuid.uuid4().hex[:6]}",
+        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+        "stage": "WEBHOOK",
+        "level": "INFO",
+        "message": "Generated new secure webhook secret and saved to SQLite configuration.",
+    }
+    _execution_logs.append(log_item)
+    save_log(log_item)
+    return {"status": "regenerated", "webhook_secret": new_secret}
+
+
 # ─── GitHub Webhook ──────────────────────────────────────────────────────────
 
 @app.post("/webhook")
