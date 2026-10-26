@@ -13,9 +13,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+FALLBACK_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 
 # ─── Robust System Prompts ────────────────────────────────────────────────────
 
@@ -55,29 +56,44 @@ Flag any suspicious packages with reasons.
 # ─── Groq API Caller ─────────────────────────────────────────────────────────
 
 def query_groq(messages: list[dict], model: str = None, temperature: float = 0.2, max_tokens: int = 1500) -> str:
-    """Sends a completion request to Groq OpenAI-compatible chat API."""
-    target_model = model or GROQ_MODEL
+    """Sends a completion request to Groq OpenAI-compatible chat API with automatic fallback."""
+    candidate_models = [model] if model else []
+    if GROQ_MODEL not in candidate_models:
+        candidate_models.append(GROQ_MODEL)
+    for fm in FALLBACK_MODELS:
+        if fm not in candidate_models:
+            candidate_models.append(fm)
+
     api_key = GROQ_API_KEY
     endpoint = f"{GROQ_BASE_URL}/chat/completions"
-    
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
-    payload = {
-        "model": target_model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    
-    response = requests.post(endpoint, headers=headers, json=payload, timeout=8)
-    if response.status_code != 200:
-        raise RuntimeError(f"Groq API Error ({response.status_code}): {response.text}")
-        
-    data = response.json()
-    return data["choices"][0]["message"]["content"]
+
+    last_err = None
+    for target_model in candidate_models:
+        payload = {
+            "model": target_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        try:
+            response = requests.post(endpoint, headers=headers, json=payload, timeout=8)
+            if response.status_code == 200:
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            elif response.status_code == 404:
+                last_err = f"Model {target_model} not found (404)"
+                continue
+            else:
+                last_err = f"Groq API Error ({response.status_code}): {response.text}"
+        except Exception as e:
+            last_err = str(e)
+            continue
+
+    raise RuntimeError(last_err or "Failed to query Groq API")
 
 
 def test_groq_connection(model: str = None) -> dict:

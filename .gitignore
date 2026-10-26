@@ -37,5 +37,6 @@ fresh_chrome_data/
 scratch_chrome_user_data*/
 shot_temp_profile/
 shot_*.png
+!shot_*_verified.png
 test_capture.png
 take_all_screenshots.py

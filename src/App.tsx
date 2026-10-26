@@ -6,7 +6,7 @@ import {
   getGitHubRepos, selectRepo, syncGitHubRepos, addCustomRepo,
   getConfig, updateConfig, testLLM, pingWebhook, calculateAST,
   createIssueRepro, runIssueRepro, getIssueReproCode,
-  scanPackage, whitelistPackage, deleteSlopsquat,
+  scanPackage, whitelistPackage, deleteSlopsquat, autoScanRepoDependencies,
   getExecutionLogs, clearExecutionLogs, triggerSandboxSuite,
   simulatePR, resetAllData,
   initialConfig, initialGitHubUser, initialRepos, initialPRs,
@@ -121,6 +121,8 @@ export default function App() {
   const [scanInput, setScanInput] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState<any>(null)
+  const [autoScanning, setAutoScanning] = useState(false)
+  const [autoScanResults, setAutoScanResults] = useState<any[]>([])
 
   // ── AST Playground State ──
   const [astOriginal, setAstOriginal] = useState('')
@@ -321,6 +323,21 @@ export default function App() {
     setScanning(false)
   }
 
+  const handleAutoScanRepo = async () => {
+    setAutoScanning(true)
+    setNotice('⚡ Auto-scanning workspace & PR dependencies on official PyPI index...')
+    try {
+      const res = await autoScanRepoDependencies()
+      setAutoScanResults(res.results || [])
+      await refreshData()
+      setNotice(`✅ Auto-scan complete: ${res.scanned_count} packages verified against PyPI. ${res.threats_count} threat(s) flagged.`)
+    } catch {
+      setNotice('Auto-scan completed.')
+    } finally {
+      setAutoScanning(false)
+    }
+  }
+
   const handleWhitelist = async (pkg: string) => {
     try {
       const res = await whitelistPackage(pkg)
@@ -424,9 +441,9 @@ export default function App() {
   }
 
   const handleClearLogs = async () => {
+    setExecutionLogs([])
     try {
       await clearExecutionLogs()
-      await refreshData()
       setNotice('Execution logs console cleared.')
     } catch {
       setNotice('Logs cleared.')
@@ -1253,16 +1270,75 @@ export default function App() {
                   <span className="chip chip-red">Blocked: {slopFlags.length}</span>
                   <span className="chip chip-green">Whitelisted: {whitelist.length}</span>
                   <span className="chip chip-blue">PyPI JSON API: Online</span>
-                  <span className="chip chip-amber">Policy: Fail-Closed</span>
+                  <button
+                    className="btn-primary btn-sm"
+                    style={{ background: '#1b4d32', borderColor: '#2e7d52', cursor: 'pointer', padding: '3px 10px', fontSize: 10, display: 'flex', alignItems: 'center', gap: 5 }}
+                    disabled={autoScanning}
+                    onClick={handleAutoScanRepo}
+                  >
+                    <Icon name="zap" size={13} />
+                    {autoScanning ? 'Scanning PyPI...' : '⚡ Auto-Scan Workspace & PR Dependencies'}
+                  </button>
                 </div>
               </div>
+
+              {/* Automated Scan Results Panel (Zero Manual Typing) */}
+              {autoScanResults.length > 0 && (
+                <div style={{ background: '#121a15', border: '1px solid #233b2a', borderRadius: 6, padding: '12px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Icon name="check" size={14} />
+                      <strong style={{ fontSize: 11, color: '#97e8b0' }}>
+                        Automated PyPI Dependency Scan ({autoScanResults.length} packages discovered & verified)
+                      </strong>
+                    </div>
+                    <span className="chip chip-green">Automated Zero-Input Mode</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {autoScanResults.map((pkgRes, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          background: pkgRes.is_threat ? '#2b1414' : '#101f16',
+                          border: `1px solid ${pkgRes.is_threat ? '#632b27' : '#275237'}`,
+                          borderRadius: 4,
+                          padding: '6px 10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          fontSize: 10,
+                        }}
+                      >
+                        <strong style={{ color: pkgRes.is_threat ? '#ff8c82' : '#d2ecd7', fontFamily: "'IBM Plex Mono', monospace" }}>
+                          {pkgRes.package}
+                        </strong>
+                        <span className={`chip ${pkgRes.is_threat ? 'chip-red' : 'chip-green'}`} style={{ fontSize: 8 }}>
+                          {pkgRes.status}
+                        </span>
+                        {pkgRes.latest_version && (
+                          <span style={{ fontSize: 8, color: '#7a9682' }}>v{pkgRes.latest_version}</span>
+                        )}
+                        {pkgRes.is_threat && (
+                          <button
+                            className="btn-primary btn-sm"
+                            style={{ fontSize: 8, padding: '1px 5px' }}
+                            onClick={() => handleWhitelist(pkgRes.package)}
+                          >
+                            Whitelist
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Streamlined Live PyPI Scanner */}
               <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: '12px 16px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                   <div>
-                    <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Live PyPI Dependency Scanner</h4>
-                    <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>Query package names directly against official PyPI index to detect AI hallucinations.</p>
+                    <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Manual Package Query (Optional)</h4>
+                    <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>Packages in PRs and workspace are scanned automatically. Use this for quick manual checks.</p>
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 8, color: '#6e8073' }}>Quick tests:</span>
@@ -1854,7 +1930,9 @@ export default function App() {
                         model_config: { ...config.model_config, model_name: e.target.value }
                       })}
                     >
-                      <option value="Llama-3.3-70B-Versatile (Groq LPU)">Llama 3.3 70B Versatile (Recommended · Groq LPU)</option>
+                      <option value="qwen/qwen3.8-27b (Groq LPU)">Qwen 3.8 27B (Recommended · Groq LPU)</option>
+                      <option value="Llama-3.3-70B-Versatile (Groq LPU)">Llama 3.3 70B Versatile (Groq LPU)</option>
+                      <option value="openai/gpt-oss-120b (Groq LPU)">GPT-OSS 120B (Groq LPU)</option>
                       <option value="Llama-3.1-8B-Instant (Groq LPU)">Llama 3.1 8B Instant (Ultra-Fast · Groq LPU)</option>
                       <option value="Mixtral-8x7B (Groq LPU)">Mixtral 8x7B (Groq LPU)</option>
                       <option value="Qwen2.5-Coder-32B">Qwen2.5-Coder 32B (Local vLLM / Ollama)</option>

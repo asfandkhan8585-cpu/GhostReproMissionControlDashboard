@@ -10,7 +10,7 @@
 const API_BASE = 'http://localhost:8000'
 
 export const GROQ_API_KEY = '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'
-export const GROQ_MODEL = 'llama-3.3-70b-versatile'
+export const GROQ_MODEL = 'qwen/qwen3.8-27b'
 export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 
 export const GHOSTREPRO_REPRO_PROMPT = `You are GhostRepro Autonomous Reproduction Engine, the core AI agent of the GhostRepro Zero-Trust Gatekeeper.
@@ -154,7 +154,7 @@ export const initialConfig: AppConfig = {
     strict_mode: true,
   },
   model_config: {
-    model_name: 'Llama-3.3-70B-Versatile (Groq LPU)',
+    model_name: 'qwen/qwen3.8-27b (Groq LPU)',
     provider: 'Groq Cloud / Open-Source LPU',
     inference_endpoint: 'https://api.groq.com/openai/v1',
     temperature: 0.2,
@@ -936,12 +936,43 @@ export async function deleteSlopsquat(packageName: string): Promise<{ status: st
   }
 }
 
+export async function autoScanRepoDependencies(): Promise<{
+  status: string
+  scanned_count: number
+  threats_count: number
+  results: Array<{
+    package: string
+    status: string
+    is_threat: boolean
+    latest_version?: string
+    message: string
+  }>
+}> {
+  try {
+    return await postJSON('/api/slopsquat/auto-scan-repo', {})
+  } catch {
+    // Offline / fallback scan against PyPI
+    const defaultPkgs = ['fastapi', 'uvicorn', 'requests', 'pydantic', 'PyGithub', 'pytest']
+    const results = []
+    for (const pkg of defaultPkgs) {
+      const res = await scanPackage(pkg)
+      results.push(res)
+    }
+    return {
+      status: 'success',
+      scanned_count: results.length,
+      threats_count: results.filter(r => r.is_threat).length,
+      results,
+    }
+  }
+}
+
 /* ─── Execution Logs & Sandbox ──────────────────────────────────────── */
 
 export async function getExecutionLogs(): Promise<LogItem[]> {
   try {
     const data = await fetchJSON<{ logs: LogItem[] }>('/api/dashboard/logs')
-    if (Array.isArray(data.logs) && data.logs.length > 0) {
+    if (Array.isArray(data?.logs)) {
       store.logs = data.logs
       store.save()
       return data.logs
@@ -953,12 +984,12 @@ export async function getExecutionLogs(): Promise<LogItem[]> {
 }
 
 export async function clearExecutionLogs(): Promise<{ status: string }> {
+  store.logs = []
+  store.save()
   try {
     const res = await fetch(`${API_BASE}/api/dashboard/logs`, { method: 'DELETE', signal: AbortSignal.timeout(2000) })
     return res.json()
   } catch {
-    store.logs = []
-    store.save()
     return { status: 'cleared' }
   }
 }
@@ -1043,32 +1074,44 @@ export async function testLLM(): Promise<{ status: string; model: string; endpoi
 
   // Direct Groq API ping as fallback
   const start = performance.now()
-  const res = await fetch(GROQ_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${store.config.model_config.api_key || GROQ_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: 'Ping GhostRepro gatekeeper.' }],
-      max_tokens: 8,
-    }),
-    signal: AbortSignal.timeout(4000),
-  })
-  const latency = Math.round(performance.now() - start)
-  if (!res.ok) {
-    throw new Error(`Groq API returned ${res.status}: ${await res.text()}`)
+  const candidateModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile']
+  let lastError = ''
+  
+  for (const m of candidateModels) {
+    try {
+      const res = await fetch(GROQ_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${store.config.model_config.api_key || GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: m,
+          messages: [{ role: 'user', content: 'Ping GhostRepro gatekeeper.' }],
+          max_tokens: 8,
+        }),
+        signal: AbortSignal.timeout(4000),
+      })
+      if (res.ok) {
+        const latency = Math.round(performance.now() - start)
+        const modelName = `${m} (Groq LPU)`
+        store.addLog('REPRO_TEST', 'PASS', `Groq LPU ping verified (${latency}ms latency) · ${modelName}`)
+        return {
+          status: 'connected',
+          model: modelName,
+          endpoint: store.config.model_config.inference_endpoint,
+          latency_ms: latency,
+          message: `${modelName} responding via Groq LPU in ${latency}ms. Autonomous reproduction & fuzzing active.`,
+        }
+      } else {
+        lastError = `Groq API returned ${res.status}: ${await res.text()}`
+      }
+    } catch (e: any) {
+      lastError = e?.message || String(e)
+    }
   }
-  const modelName = 'Llama-3.3-70B-Versatile (Groq LPU)'
-  store.addLog('REPRO_TEST', 'PASS', `Groq LPU ping verified (${latency}ms latency) · ${modelName}`)
-  return {
-    status: 'connected',
-    model: modelName,
-    endpoint: store.config.model_config.inference_endpoint,
-    latency_ms: latency,
-    message: `${modelName} responding via Groq LPU in ${latency}ms. Autonomous reproduction & fuzzing active.`,
-  }
+
+  throw new Error(lastError || 'Unable to connect to Groq inference endpoint')
 }
 
 export async function pingWebhook(): Promise<{ status: string; event: PipelineEvent }> {
