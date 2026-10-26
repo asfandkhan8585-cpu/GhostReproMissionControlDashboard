@@ -123,6 +123,7 @@ export default function App() {
 
   // ── Configuration State (NEVER NULL) ──
   const [config, setConfig] = useState<AppConfig>(initialConfig)
+  const [settingsSubTab, setSettingsSubTab] = useState<'rules' | 'models' | 'repo'>('rules')
   const [cfgSaving, setCfgSaving] = useState(false)
   const [savedSuccessSection, setSavedSuccessSection] = useState<string | null>(null)
   const [llmTesting, setLlmTesting] = useState(false)
@@ -233,9 +234,13 @@ export default function App() {
         }
       }
       await refreshData()
-      setNotice(`✅ Synchronized ${res?.count ?? repos.length} repositories from GitHub.`)
-    } catch {
-      setNotice(`Sync complete: ${repos.length} repositories active.`)
+      if (res?.status === 'offline') {
+        setNotice(`⚠️ Remote sync unreachable. Showing ${repos.length} cached repositories.`)
+      } else {
+        setNotice(`✅ Synchronized ${res?.count ?? repos.length} repositories from GitHub.`)
+      }
+    } catch (err: any) {
+      setNotice(`❌ Repo sync failed: ${err.message || 'Unable to sync repositories.'}`)
     } finally {
       setTimeout(() => {
         setIsSyncing(false)
@@ -313,7 +318,7 @@ export default function App() {
       await refreshData()
       setNotice(res.message || `✅ @${username}: execution authorized and PR incorporated into GitHub!`)
     } catch (err: any) {
-      setNotice(`Authorized ${username}: ${err.message || 'Updated locally.'}`)
+      setNotice(`❌ Authorization failed for @${username}: ${err.message || 'Operation failed.'}`)
     }
     setAuthorizing(null)
   }
@@ -326,7 +331,7 @@ export default function App() {
       await refreshData()
       setNotice(res.message)
     } catch (err: any) {
-      setNotice(`⚠️ GitHub Merge: ${err.message || 'Failed to complete merge.'}`)
+      setNotice(`❌ GitHub Merge failed: ${err.message || 'Failed to complete merge.'}`)
     }
     setMergingPrNumber(null)
   }
@@ -336,8 +341,8 @@ export default function App() {
       const res = await rejectUser(username, githubPatInput || undefined)
       await refreshData()
       setNotice(res.message || `❌ @${username}: contribution rejected and closed on GitHub.`)
-    } catch {
-      setNotice(`Rejected contribution for ${username}.`)
+    } catch (err: any) {
+      setNotice(`❌ Rejection failed for @${username}: ${err?.message || 'Operation failed.'}`)
     }
   }
 
@@ -353,8 +358,8 @@ export default function App() {
       setScanResult(res)
       await refreshData()
       setNotice(res.is_threat ? `🚨 Threat Alert: ${res.message}` : `✅ Package check: ${res.message}`)
-    } catch {
-      setNotice(`Scan completed for ${target}.`)
+    } catch (err: any) {
+      setNotice(`❌ PyPI scan failed for ${target}: ${err?.message || 'Index unreachable.'}`)
     }
     setScanning(false)
   }
@@ -611,7 +616,7 @@ export default function App() {
             {backendOnline ? 'Backend connected · Operational' : 'Client engine online · Ready'}
           </span>
 
-          <span className="model" style={{ cursor: 'pointer' }} onClick={() => setTab('Models & agents')}>
+          <span className="model" style={{ cursor: 'pointer' }} onClick={() => { setSettingsSubTab('models'); setTab('Settings'); }}>
             <span>◈</span> {config.model_config.model_name} <small>{config.model_config.context_window}</small>
           </span>
 
@@ -666,7 +671,6 @@ export default function App() {
             ['Live Agent Studio', 'play'],
             ['Pull requests', 'branch'],
             ['Quarantine', 'shield'],
-            ['Bug reproductions', 'bug'],
             ['Execution logs', 'terminal'],
           ] as const).map(([label, icon]) => (
             <button
@@ -682,7 +686,6 @@ export default function App() {
               {label === 'Live Agent Studio' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#1f6feb', color: '#fff', borderRadius: 3, fontWeight: 700, marginLeft: 'auto' }}>LAB</span>}
               {label === 'Quarantine' && <b>{queue.length}</b>}
               {label === 'Pull requests' && <small>{prs.length}</small>}
-              {label === 'Bug reproductions' && <small>{repros.length}</small>}
             </button>
           ))}
 
@@ -692,24 +695,9 @@ export default function App() {
             <Icon name="package"/><span>Slopsquatting</span>
             {slopFlags.length > 0 && <b>{slopFlags.length}</b>}
           </button>
-          <button className={`nav-item ${tab === 'AST analysis' ? 'selected' : ''}`} onClick={() => setTab('AST analysis')}>
-            <Icon name="zap"/><span>AST analysis</span>
-          </button>
 
           <div className="side-separator"/>
           <div className="side-label">CONFIGURATION</div>
-          <button
-            className={`nav-item ${tab === 'Verification rules' ? 'selected' : ''}`}
-            onClick={() => setTab('Verification rules')}
-          >
-            <Icon name="shield"/><span>Verification rules</span>
-          </button>
-          <button
-            className={`nav-item ${tab === 'Models & agents' ? 'selected' : ''}`}
-            onClick={() => setTab('Models & agents')}
-          >
-            <Icon name="activity"/><span>Models & agents</span>
-          </button>
           <button
             className={`nav-item ${tab === 'Settings' ? 'selected' : ''}`}
             onClick={() => setTab('Settings')}
@@ -750,8 +738,8 @@ export default function App() {
               <button className="button" onClick={() => setTab('Execution logs')}>
                 <Icon name="terminal" size={15}/> Workstation logs <span>↗</span>
               </button>
-              <button className="btn-primary" onClick={handleTriggerFullTest}>
-                <Icon name="play" size={13}/> Run Full Sandbox Suite
+              <button className="btn-primary" onClick={() => setTab('Live Agent Studio')}>
+                <Icon name="play" size={13}/> Launch Live Agent Studio
               </button>
             </div>
           </div>
@@ -1249,148 +1237,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ════════════════════════════════════════════════════════════════
-              TAB: BUG REPRODUCTIONS
-             ════════════════════════════════════════════════════════════════ */}
-          {tab === 'Bug reproductions' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Sleek Minimal Telemetry Strip */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, flexShrink: 0 }}>
-                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
-                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>ACTIVE RED TESTS</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#ff8a80', marginTop: 1 }}>
-                    {repros.filter(r => r.repro_status === 'RED').length}
-                  </div>
-                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Failing bug proofs</div>
-                </div>
-                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
-                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>VERIFIED GREEN</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#7de899', marginTop: 1 }}>
-                    {repros.filter(r => r.repro_status === 'GREEN').length}
-                  </div>
-                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Fixed & verified</div>
-                </div>
-                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
-                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>REPRODUCTION ACCURACY</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#82c2ff', marginTop: 1 }}>100%</div>
-                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Zero false positives</div>
-                </div>
-                <div style={{ background: '#152019', border: '1px solid #2b3d30', borderRadius: 5, padding: '8px 12px' }}>
-                  <div style={{ font: "8px 'IBM Plex Mono'", color: '#88a08e' }}>INFERENCE ENGINE</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#b9cbbd', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {config.model_config.model_name.replace(' (Groq LPU)', '')}
-                  </div>
-                  <div style={{ fontSize: 8, color: '#7a8e80' }}>Groq LPU Inference</div>
-                </div>
-              </div>
 
-              {/* Action Header & Quick Generator */}
-              <div style={{ background: '#141c18', border: '1px solid #304234', borderRadius: 6, padding: '10px 14px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Autonomous Issue-to-Test Reproduction Suite</h3>
-                    <p style={{ margin: '1px 0 0', color: '#8fa092', fontSize: 9 }}>
-                      Synthesizes standalone failing pytest files proving the bug before PR reviews begin.
-                    </p>
-                  </div>
-                  <button className="btn-primary btn-sm" onClick={() => setNewReproModalOpen(true)}>
-                    <Icon name="plus" size={13}/> New Bug Repro
-                  </button>
-                </div>
-
-                {/* Inline Quick Repro Creator */}
-                <form onSubmit={handleQuickCreateRepro} style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    style={{ flex: 1, padding: '6px 10px', background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
-                    placeholder="Enter issue title to synthesize reproduction test (e.g. Session expires upon OAuth redirect)..."
-                    value={quickIssueTitle}
-                    onChange={e => setQuickIssueTitle(e.target.value)}
-                  />
-                  <button type="submit" className="btn-primary btn-sm">
-                    <Icon name="zap" size={12}/> Synthesize Repro
-                  </button>
-                </form>
-              </div>
-
-              {/* Bug Repro Content Area */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {repros.length === 0 ? (
-                  <div style={{ minHeight: 260, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 36, textAlign: 'center', background: '#131b17', border: '1px solid var(--line)', borderRadius: 6 }}>
-                    <Icon name="bug" size={32}/>
-                    <h3 style={{ margin: '10px 0 4px', color: '#91b69c', fontSize: 14 }}>No Bug Reproduction Tests Generated Yet</h3>
-                    <p style={{ color: '#778a7d', fontSize: 10, maxWidth: 440, margin: 'auto' }}>
-                      Enter an issue title in the synthesizer above to generate your first autonomous mathematical proof (<code>test_repro_1.py</code>).
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 14 }}>
-                    {/* Left: Assertion Matrix Table */}
-                    <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Autonomous Pytest Assertion Proof Matrix</h4>
-                        <span className="tiny-label">ISOLATED SANDBOX</span>
-                      </div>
-                      <div className="table-scroll">
-                        <table>
-                          <thead><tr>
-                            <th>ISSUE</th>
-                            <th>TITLE</th>
-                            <th>PROOF STATUS</th>
-                            <th>TARGET FILE</th>
-                            <th>ACTIONS</th>
-                          </tr></thead>
-                          <tbody>
-                            {repros.map(r => (
-                              <tr key={r.issue_number}>
-                                <td><strong>#{r.issue_number}</strong></td>
-                                <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</td>
-                                <td>
-                                  <span className={`chip ${r.repro_status === 'RED' ? 'chip-red' : 'chip-green'}`}>
-                                    {r.repro_status}
-                                  </span>
-                                </td>
-                                <td><code>{r.test_file}</code></td>
-                                <td>
-                                  <div style={{ display: 'flex', gap: 4 }}>
-                                    <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>Code</button>
-                                    <button className="btn-primary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleRunIssueRepro(r.issue_number)}>Execute</button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Right: Repro Cards List */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', maxHeight: 480 }}>
-                      {repros.map(r => (
-                        <div key={r.issue_number} style={{ background: '#131c17', border: '1px solid #324436', borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ font: "10px 'IBM Plex Mono'", fontWeight: 700, color: '#79c0ff' }}>Issue #{r.issue_number}</span>
-                            <span className={`chip ${r.repro_status === 'RED' ? 'chip-red' : 'chip-green'}`} style={{ fontSize: 8 }}>
-                              {r.repro_status === 'RED' ? '🔴 RED Proof' : '🟢 GREEN Fix'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 11, fontWeight: 500, color: '#e6edf3' }}>{r.title}</div>
-                          <code style={{ fontSize: 9, color: '#8a9b8e', background: '#1a261f', padding: '3px 6px', borderRadius: 3 }}>{r.test_file}</code>
-                          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                            <button className="btn-primary btn-sm" style={{ flex: 1, padding: '3px 8px', fontSize: 9 }} onClick={() => handleRunIssueRepro(r.issue_number)}>
-                              <Icon name="play" size={10}/> Run Sandbox Test
-                            </button>
-                            <button className="btn-secondary btn-sm" style={{ padding: '3px 8px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>
-                              <Icon name="terminal" size={10}/> View Code
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* ════════════════════════════════════════════════════════════════
               TAB: SLOPSQUATTING THREAT INTEL (DECLUTTERED)
@@ -1711,591 +1558,380 @@ export default function App() {
             </div>
           )}
 
-          {/* ════════════════════════════════════════════════════════════════
-              TAB: AST ANALYSIS
-             ════════════════════════════════════════════════════════════════ */}
-          {tab === 'AST analysis' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 14 }}>
-              {/* Left Column: Interactive Calculator */}
-              <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, padding: '14px 18px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 13, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Icon name="zap" size={15}/> AST Blast-Radius Calculator & Scope Creep
-                    </h3>
-                    <p style={{ margin: '1px 0 0', color: '#8fa092', fontSize: 9.5 }}>
-                      Computes Abstract Syntax Tree statement deltas (Δ) & scope creep.
-                    </p>
-                  </div>
-                  <span style={{ fontSize: 9.5, color: '#7a8e80' }}>Threshold: &le; 50 &Delta;</span>
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label style={{ font: "8.5px 'IBM Plex Mono'", color: '#8fa594', display: 'block', marginBottom: 4 }}>
-                      ORIGINAL BASELINE CODE
-                    </label>
-                    <textarea
-                      rows={14}
-                      placeholder="Enter baseline Python code..."
-                      style={{ width: '100%', minHeight: 280, padding: 10, background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e6edf3', font: "11px 'IBM Plex Mono', monospace", resize: 'vertical' }}
-                      value={astOriginal}
-                      onChange={e => setAstOriginal(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label style={{ font: "8.5px 'IBM Plex Mono'", color: '#8fa594', display: 'block', marginBottom: 4 }}>
-                      PULL REQUEST MODIFIED CODE
-                    </label>
-                    <textarea
-                      rows={14}
-                      placeholder="Enter modified Python code..."
-                      style={{ width: '100%', minHeight: 280, padding: 10, background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e6edf3', font: "11px 'IBM Plex Mono', monospace", resize: 'vertical' }}
-                      value={astModified}
-                      onChange={e => setAstModified(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <button className="btn-primary btn-sm" disabled={astCalculating} onClick={handleCalculateAST}>
-                      <Icon name="zap" size={12}/> {astCalculating ? 'Parsing…' : 'Calculate Blast Radius (Δ)'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm"
-                      onClick={() => {
-                        setAstOriginal('def calc_total(items):\n    return sum(x.price for x in items)\n')
-                        setAstModified('def calc_total(items, discount=0):\n    # Bugfix for voucher discount\n    subtotal = sum(x.price for x in items)\n    return max(0, subtotal - discount)\n')
-                        setNotice('Loaded test code snippet into AST calculator.')
-                      }}
-                    >
-                      + Sample
-                    </button>
-                    {(astOriginal || astModified) && (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-sm"
-                        onClick={() => {
-                          setAstOriginal('')
-                          setAstModified('')
-                          setAstResult(null)
-                          setNotice('Cleared AST playground.')
-                        }}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* AST Output Card */}
-                {astResult && (
-                  <div style={{ marginTop: 8, padding: 10, background: '#18241d', border: '1px solid #3d5644', borderRadius: 5 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>AST Parse Verdict:</strong>
-                      <span className={`chip ${astResult.scope_creep_detected ? 'chip-red' : 'chip-green'}`}>
-                        {astResult.scope_creep_detected ? '🚨 SCOPE CREEP DETECTED' : '✓ SCOPE COMPLIANT'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 6 }}>
-                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
-                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>STATEMENT DELTA</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: astResult.statement_delta > 50 ? '#ff8a80' : '#7de899' }}>
-                          Δ{astResult.statement_delta}
-                        </div>
-                      </div>
-                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
-                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>ORIGINAL STATEMENTS</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#c9d8cc' }}>
-                          {astResult.original_statements}
-                        </div>
-                      </div>
-                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
-                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>MODIFIED STATEMENTS</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#c9d8cc' }}>
-                          {astResult.modified_statements}
-                        </div>
-                      </div>
-                      <div style={{ background: '#111a15', padding: 6, borderRadius: 3 }}>
-                        <div style={{ font: "7px 'IBM Plex Mono'", color: '#778a7d' }}>FUNCTIONS ADDED</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#c9d8cc' }}>
-                          {astResult.functions_added?.length || 0}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Right Column: Active PR Blast Radius Table */}
-              <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Active PR Blast-Radius Metrics</h3>
-                  <span className="tiny-label">MONITORED REPO</span>
-                </div>
-                <div className="table-scroll" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
-                  {prs.filter(pr => pr.blast_radius).map(pr => (
-                    <div key={pr.id} style={{ padding: 10, border: '1px solid #304234', borderRadius: 4, background: '#111814' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 9, color: '#79c0ff' }}>PR #{pr.number}</span>
-                        <span className={`chip ${pr.blast_radius?.scope_creep_detected ? 'chip-red' : 'chip-green'}`}>
-                          {pr.blast_radius?.scope_creep_detected ? 'SCOPE CREEP' : 'CLEAN'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 10, fontWeight: 500, color: '#e6edf3', marginBottom: 6 }}>{pr.title}</div>
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'IBM Plex Mono'", color: (pr.blast_radius?.statement_delta || 0) > 50 ? '#ff938a' : '#56d364' }}>
-                            Δ{pr.blast_radius?.statement_delta}
-                          </div>
-                          <div style={{ fontSize: 7, color: '#8b949e' }}>delta</div>
-                        </div>
-                        <div style={{ fontSize: 9, color: '#b1bac4' }}>
-                          <div>Author: {pr.author}</div>
-                          <div>Tier: {pr.tier}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {prs.filter(pr => pr.blast_radius).length === 0 && (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#778a7d', fontSize: 10, margin: 'auto' }}>
-                      No pull requests analyzed yet. Click "Load Sample Snippet" on the left to test live AST parsing.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ════════════════════════════════════════════════════════════════
-              TAB: VERIFICATION RULES (CONFIGURATION)
-             ════════════════════════════════════════════════════════════════ */}
-          {tab === 'Verification rules' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Header Strip */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Icon name="shield" size={15}/> Zero-Trust Verification Policy & Security Gates
-                  </h3>
-                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>
-                    Enforces cryptographic and mathematical clearance gates for incoming PRs and dependencies.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <button className="btn-secondary btn-sm" onClick={() => {
-                    setConfig({
-                      ...config,
-                      verification_rules: {
-                        min_trust_score: 80,
-                        auto_quarantine_first_timers: true,
-                        blast_radius_threshold: 50,
-                        block_slopsquatting: true,
-                        fuzzing_mutation_count: 128,
-                        strict_mode: true,
-                      }
-                    })
-                    setNotice('Reset rules to defaults.')
-                  }}>
-                    Reset Defaults
-                  </button>
-                  <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('verification_rules')}>
-                    <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Rules'}
-                  </button>
-                  {savedSuccessSection === 'verification_rules' && (
-                    <span className="chip chip-green">✓ Saved</span>
-                  )}
-                </div>
-              </div>
-
-              {/* 2-Column Responsive Policy Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
-                {/* Column 1: Identity & Quarantine */}
-                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CONTRIBUTOR REPUTATION GATE</div>
-                  
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                      <label style={{ margin: 0 }}>Minimum Fast-Track Trust Score</label>
-                      <span className="chip chip-green" style={{ fontSize: 9 }}>{config.verification_rules.min_trust_score} / 100</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={config.verification_rules.min_trust_score}
-                      onChange={e => setConfig({
-                        ...config,
-                        verification_rules: { ...config.verification_rules, min_trust_score: Number(e.target.value) }
-                      })}
-                    />
-                    <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 2 }}>
-                      Authors below this score are automatically isolated in the Quarantine sandbox.
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
-                    <div>
-                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Quarantine First-Time & Bot Accounts</strong>
-                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
-                        Zero-trust hold on unverified personas until maintainer review.
-                      </div>
-                    </div>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={config.verification_rules.auto_quarantine_first_timers}
-                        onChange={e => setConfig({
-                          ...config,
-                          verification_rules: { ...config.verification_rules, auto_quarantine_first_timers: e.target.checked }
-                        })}
-                      />
-                      <span className="slider"/>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Column 2: AST Blast Radius & Threat Intel */}
-                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CODE AUDIT & SLOP DEFENSE</div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                      <label style={{ margin: 0 }}>AST Blast Radius Threshold</label>
-                      <span className="chip chip-blue" style={{ fontSize: 9 }}>&le; &Delta;{config.verification_rules.blast_radius_threshold} statements</span>
-                    </div>
-                    <input
-                      type="number"
-                      value={config.verification_rules.blast_radius_threshold}
-                      onChange={e => setConfig({
-                        ...config,
-                        verification_rules: { ...config.verification_rules, blast_radius_threshold: Number(e.target.value) }
-                      })}
-                    />
-                    <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 2 }}>
-                      PRs adding more statements than this threshold trigger scope creep flags.
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
-                    <div>
-                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Strict PyPI Slopsquatting Protection</strong>
-                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
-                        Rejects unindexed packages & hallucinated AI dependencies.
-                      </div>
-                    </div>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={config.verification_rules.block_slopsquatting}
-                        onChange={e => setConfig({
-                          ...config,
-                          verification_rules: { ...config.verification_rules, block_slopsquatting: e.target.checked }
-                        })}
-                      />
-                      <span className="slider"/>
-                    </label>
-                  </div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <label style={{ marginBottom: 3 }}>Adversarial Fuzzing Mutation Depth</label>
-                    <select
-                      value={config.verification_rules.fuzzing_mutation_count}
-                      onChange={e => setConfig({
-                        ...config,
-                        verification_rules: { ...config.verification_rules, fuzzing_mutation_count: Number(e.target.value) }
-                      })}
-                    >
-                      <option value={32}>32 Mutations (Fast)</option>
-                      <option value={64}>64 Mutations (Standard)</option>
-                      <option value={128}>128 Mutations (Thorough)</option>
-                      <option value={256}>256 Mutations (Adversarial Paranoia)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════════
-              TAB: MODELS & AGENTS (CONFIGURATION)
-             ════════════════════════════════════════════════════════════════ */}
-          {tab === 'Models & agents' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Header Strip */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Icon name="activity" size={15}/> Inference Engine & Autonomous Agents
-                  </h3>
-                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>
-                    Powers autonomous test synthesis and bug reproduction proofs with open-weight models.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button className="btn-secondary btn-sm" disabled={llmTesting} onClick={handleTestLLM}>
-                    <Icon name="activity" size={11}/> {llmTesting ? 'Pinging LLM…' : 'Test LLM Connection'}
-                  </button>
-                  <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('ai_model_config')}>
-                    <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Model Settings'}
-                  </button>
-                  {savedSuccessSection === 'ai_model_config' && (
-                    <span className="chip chip-green">✓ Saved</span>
-                  )}
-                </div>
-              </div>
-
-              {llmTestStatus && (
-                <div className="chip chip-green" style={{ padding: '4px 10px', width: 'fit-content', flexShrink: 0 }}>
-                  ✓ {llmTestStatus}
-                </div>
-              )}
-
-              {/* 2-Column Responsive Model Config Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
-                {/* Column 1: Model Selection & Endpoint */}
-                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>ACTIVE INFERENCE BACKEND</div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <label style={{ marginBottom: 3 }}>Primary Code Model</label>
-                    <select
-                      value={config.model_config.model_name}
-                      onChange={e => setConfig({
-                        ...config,
-                        model_config: { ...config.model_config, model_name: e.target.value }
-                      })}
-                    >
-                      <option value="qwen/qwen3.8-27b (Groq LPU)">Qwen 3.8 27B (Recommended · Groq LPU)</option>
-                      <option value="Llama-3.3-70B-Versatile (Groq LPU)">Llama 3.3 70B Versatile (Groq LPU)</option>
-                      <option value="openai/gpt-oss-120b (Groq LPU)">GPT-OSS 120B (Groq LPU)</option>
-                      <option value="Llama-3.1-8B-Instant (Groq LPU)">Llama 3.1 8B Instant (Ultra-Fast · Groq LPU)</option>
-                      <option value="Mixtral-8x7B (Groq LPU)">Mixtral 8x7B (Groq LPU)</option>
-                      <option value="Qwen2.5-Coder-32B">Qwen2.5-Coder 32B (Local vLLM / Ollama)</option>
-                      <option value="DeepSeek-Coder-V2">DeepSeek-Coder-V2 236B</option>
-                      <option value="Claude-3.7-Sonnet">Claude 3.7 Sonnet (Anthropic API)</option>
-                      <option value="GPT-4o">GPT-4o (OpenAI API)</option>
-                    </select>
-                  </div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <label style={{ marginBottom: 3 }}>Inference Endpoint URL</label>
-                    <input
-                      value={config.model_config.inference_endpoint}
-                      onChange={e => setConfig({
-                        ...config,
-                        model_config: { ...config.model_config, inference_endpoint: e.target.value }
-                      })}
-                    />
-                  </div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <label style={{ marginBottom: 3 }}>API Key / Bearer Token</label>
-                    <input
-                      type="password"
-                      value={config.model_config.api_key}
-                      onChange={e => setConfig({
-                        ...config,
-                        model_config: { ...config.model_config, api_key: e.target.value }
-                      })}
-                    />
-                  </div>
-                </div>
-
-                {/* Column 2: Hyperparameters & Context Window */}
-                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>REASONING PARAMETERS</div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                      <label style={{ margin: 0 }}>Sampling Temperature</label>
-                      <span className="chip chip-amber" style={{ fontSize: 9 }}>{config.model_config.temperature}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={config.model_config.temperature}
-                      onChange={e => setConfig({
-                        ...config,
-                        model_config: { ...config.model_config, temperature: Number(e.target.value) }
-                      })}
-                    />
-                    <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 2 }}>
-                      0.10 - 0.20 is optimal for deterministic Python pytest assertions.
-                    </div>
-                  </div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <label style={{ marginBottom: 3 }}>Context Window Capacity</label>
-                    <select
-                      value={config.model_config.context_window}
-                      onChange={e => setConfig({
-                        ...config,
-                        model_config: { ...config.model_config, context_window: e.target.value }
-                      })}
-                    >
-                      <option value="16k">16,384 tokens (Fast)</option>
-                      <option value="32k">32,768 tokens (Default)</option>
-                      <option value="64k">65,536 tokens (Full Repo Context)</option>
-                    </select>
-                  </div>
-
-                  <div style={{ padding: 8, background: '#111915', border: '1px solid #25362a', borderRadius: 4, marginTop: 2 }}>
-                    <div style={{ font: "8.5px 'IBM Plex Mono'", color: '#8fa092' }}>AGENT CAPABILITIES:</div>
-                    <div style={{ fontSize: 8.5, color: '#c3d4c7', marginTop: 2, lineHeight: 1.4 }}>
-                      • Deterministic AST Test Synthesizer<br/>
-                      • Failing Proof-of-Concept Generator<br/>
-                      • Flaky Test & Hallucination Detector
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════════
-              TAB: SETTINGS (CONFIGURATION)
+              TAB: SETTINGS (UNIFIED CONFIGURATION)
              ════════════════════════════════════════════════════════════════ */}
           {tab === 'Settings' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Header Strip */}
+              {/* Settings Subnav Tabs */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 12, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Icon name="settings" size={15}/> Repository & Webhook Integration Settings
+                  <h3 style={{ margin: 0, fontSize: 13, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="settings" size={15}/> System Configuration & Clearance Policies
                   </h3>
-                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>
-                    Manage incoming GitHub webhook endpoints, automated merge gates, and execution limits.
+                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9.5 }}>
+                    Manage zero-trust verification rules, AI inference models, and webhook endpoints.
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button className="btn-secondary btn-sm" onClick={() => {
-                    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
-                    const url = URL.createObjectURL(blob)
-                    const a = document.createElement('a')
-                    a.href = url
-                    a.download = 'ghostrepro-config.json'
-                    a.click()
-                    setNotice('Configuration exported as JSON.')
-                  }}>
-                    Export JSON
+                  <button
+                    className={`btn-secondary btn-sm ${settingsSubTab === 'rules' ? 'chip-green' : ''}`}
+                    onClick={() => setSettingsSubTab('rules')}
+                  >
+                    <Icon name="shield" size={11}/> Verification Rules
                   </button>
-                  <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('repo_settings')}>
-                    <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Settings'}
+                  <button
+                    className={`btn-secondary btn-sm ${settingsSubTab === 'models' ? 'chip-blue' : ''}`}
+                    onClick={() => setSettingsSubTab('models')}
+                  >
+                    <Icon name="activity" size={11}/> AI Inference & Models
                   </button>
-                  {savedSuccessSection === 'repo_settings' && (
-                    <span className="chip chip-green">✓ Saved</span>
-                  )}
+                  <button
+                    className={`btn-secondary btn-sm ${settingsSubTab === 'repo' ? 'chip-amber' : ''}`}
+                    onClick={() => setSettingsSubTab('repo')}
+                  >
+                    <Icon name="settings" size={11}/> Webhook & Sandbox
+                  </button>
                 </div>
               </div>
 
-              {/* 2-Column Responsive Settings Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
-                {/* Column 1: Webhook Configuration */}
-                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>GITHUB WEBHOOK RECEIVER</div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <label style={{ marginBottom: 3 }}>Target Webhook URL</label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        readOnly
-                        value={config.repo_settings.webhook_url}
-                        style={{ flex: 1 }}
-                      />
-                      <button className="btn-secondary btn-sm" onClick={() => { navigator.clipboard?.writeText(config.repo_settings.webhook_url); setNotice('Webhook URL copied to clipboard!') }}>
-                        <Icon name="copy" size={11}/>
-                      </button>
-                      <button className="btn-primary btn-sm" onClick={handlePingWebhook}>
-                        Ping
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <label style={{ marginBottom: 3 }}>Webhook Secret Token</label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        value={config.repo_settings.webhook_secret}
-                        onChange={e => setConfig({
-                          ...config,
-                          repo_settings: { ...config.repo_settings, webhook_secret: e.target.value }
-                        })}
-                        style={{ flex: 1 }}
-                      />
+              {/* ── SubTab 1: Verification Rules ── */}
+              {settingsSubTab === 'rules' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
+                    <span style={{ fontSize: 11, color: '#97e8b0' }}>Zero-Trust Cryptographic & AST Clearance Policies</span>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <button className="btn-secondary btn-sm" onClick={() => {
-                        const newSec = `whsec_${Math.random().toString(36).substring(2, 15)}`
-                        setConfig({ ...config, repo_settings: { ...config.repo_settings, webhook_secret: newSec } })
-                        setNotice('New webhook secret generated.')
+                        setConfig({
+                          ...config,
+                          verification_rules: {
+                            min_trust_score: 80,
+                            auto_quarantine_first_timers: true,
+                            blast_radius_threshold: 50,
+                            block_slopsquatting: true,
+                            fuzzing_mutation_count: 128,
+                            strict_mode: true,
+                          }
+                        })
+                        setNotice('Reset rules to defaults.')
                       }}>
-                        Regen
+                        Reset Defaults
                       </button>
+                      <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('verification_rules')}>
+                        <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Rules'}
+                      </button>
+                      {savedSuccessSection === 'verification_rules' && (
+                        <span className="chip chip-green">✓ Saved</span>
+                      )}
                     </div>
                   </div>
-                </div>
 
-                {/* Column 2: Governance & Sandbox Execution */}
-                <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>EXECUTION & MERGE GATE</div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
-                    <div>
-                      <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Merge on Full Verification Pass</strong>
-                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
-                        Merges PRs passing RED&rarr;GREEN proofs and surviving fuzzing.
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CONTRIBUTOR REPUTATION GATE</div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                          <label style={{ margin: 0 }}>Minimum Fast-Track Trust Score</label>
+                          <span className="chip chip-green" style={{ fontSize: 9 }}>{config.verification_rules.min_trust_score} / 100</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={config.verification_rules.min_trust_score}
+                          onChange={e => setConfig({
+                            ...config,
+                            verification_rules: { ...config.verification_rules, min_trust_score: Number(e.target.value) }
+                          })}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+                        <div>
+                          <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Quarantine First-Time & Bot Accounts</strong>
+                          <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                            Zero-trust hold on unverified personas until maintainer review.
+                          </div>
+                        </div>
+                        <label className="switch">
+                          <input
+                            type="checkbox"
+                            checked={config.verification_rules.auto_quarantine_first_timers}
+                            onChange={e => setConfig({
+                              ...config,
+                              verification_rules: { ...config.verification_rules, auto_quarantine_first_timers: e.target.checked }
+                            })}
+                          />
+                          <span className="slider"/>
+                        </label>
                       </div>
                     </div>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={config.repo_settings.auto_merge_on_pass}
-                        onChange={e => setConfig({
-                          ...config,
-                          repo_settings: { ...config.repo_settings, auto_merge_on_pass: e.target.checked }
-                        })}
-                      />
-                      <span className="slider"/>
-                    </label>
-                  </div>
 
-                  <div className="form-field" style={{ margin: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                      <label style={{ margin: 0 }}>Sandbox Execution Timeout</label>
-                      <span className="chip chip-blue" style={{ fontSize: 9 }}>{config.repo_settings.sandbox_timeout_sec} seconds</span>
+                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CODE AUDIT & SLOP DEFENSE</div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                          <label style={{ margin: 0 }}>AST Blast Radius Threshold</label>
+                          <span className="chip chip-blue" style={{ fontSize: 9 }}>&le; &Delta;{config.verification_rules.blast_radius_threshold} statements</span>
+                        </div>
+                        <input
+                          type="number"
+                          value={config.verification_rules.blast_radius_threshold}
+                          onChange={e => setConfig({
+                            ...config,
+                            verification_rules: { ...config.verification_rules, blast_radius_threshold: Number(e.target.value) }
+                          })}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+                        <div>
+                          <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Strict PyPI Slopsquatting Protection</strong>
+                          <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                            Rejects unindexed packages & hallucinated AI dependencies.
+                          </div>
+                        </div>
+                        <label className="switch">
+                          <input
+                            type="checkbox"
+                            checked={config.verification_rules.block_slopsquatting}
+                            onChange={e => setConfig({
+                              ...config,
+                              verification_rules: { ...config.verification_rules, block_slopsquatting: e.target.checked }
+                            })}
+                          />
+                          <span className="slider"/>
+                        </label>
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min="10"
-                      max="120"
-                      value={config.repo_settings.sandbox_timeout_sec}
-                      onChange={e => setConfig({
-                        ...config,
-                        repo_settings: { ...config.repo_settings, sandbox_timeout_sec: Number(e.target.value) }
-                      })}
-                    />
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Sleek Danger Zone Strip */}
-              <div style={{ padding: '8px 14px', background: '#1c1414', border: '1px solid #4a2323', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Icon name="alert" size={14}/>
-                  <div>
-                    <strong style={{ fontSize: 10, color: '#ff9a92' }}>Danger Zone · Purge Session & Simulation Data</strong>
-                    <div style={{ fontSize: 8, color: '#c99692' }}>Permanently resets PR queue, bug proofs, and simulation data to zero state.</div>
+              {/* ── SubTab 2: AI Model & Inference ── */}
+              {settingsSubTab === 'models' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
+                    <span style={{ fontSize: 11, color: '#97e8b0' }}>LLM Inference Engine & Open-Weight Reasoning Configuration</span>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button className="btn-secondary btn-sm" disabled={llmTesting} onClick={handleTestLLM}>
+                        <Icon name="activity" size={11}/> {llmTesting ? 'Pinging LLM…' : 'Test LLM Connection'}
+                      </button>
+                      <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('ai_model_config')}>
+                        <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Model Settings'}
+                      </button>
+                      {savedSuccessSection === 'ai_model_config' && (
+                        <span className="chip chip-green">✓ Saved</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {llmTestStatus && (
+                    <div className="chip chip-green" style={{ padding: '4px 10px', width: 'fit-content' }}>
+                      ✓ {llmTestStatus}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>ACTIVE INFERENCE BACKEND</div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <label style={{ marginBottom: 3 }}>Primary Code Model</label>
+                        <select
+                          value={config.model_config.model_name}
+                          onChange={e => setConfig({
+                            ...config,
+                            model_config: { ...config.model_config, model_name: e.target.value }
+                          })}
+                        >
+                          <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (Recommended · Groq)</option>
+                          <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Ultra-Fast · Groq)</option>
+                          <option value="mixtral-8x7b-32768">Mixtral 8x7B (Groq)</option>
+                          <option value="gemma2-9b-it">Gemma 2 9B (Groq)</option>
+                          <option value="deepseek-r1-distill-llama-70b">DeepSeek R1 Distill Llama 70B (Groq)</option>
+                        </select>
+                      </div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <label style={{ marginBottom: 3 }}>Inference Endpoint URL</label>
+                        <input
+                          value={config.model_config.inference_endpoint}
+                          onChange={e => setConfig({
+                            ...config,
+                            model_config: { ...config.model_config, inference_endpoint: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <label style={{ marginBottom: 3 }}>API Key / Bearer Token</label>
+                        <input
+                          type="password"
+                          value={config.model_config.api_key}
+                          placeholder="gsk_••••••••"
+                          onChange={e => setConfig({
+                            ...config,
+                            model_config: { ...config.model_config, api_key: e.target.value }
+                          })}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>REASONING PARAMETERS</div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                          <label style={{ margin: 0 }}>Sampling Temperature</label>
+                          <span className="chip chip-amber" style={{ fontSize: 9 }}>{config.model_config.temperature}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={config.model_config.temperature}
+                          onChange={e => setConfig({
+                            ...config,
+                            model_config: { ...config.model_config, temperature: Number(e.target.value) }
+                          })}
+                        />
+                      </div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <label style={{ marginBottom: 3 }}>Context Window Capacity</label>
+                        <select
+                          value={config.model_config.context_window}
+                          onChange={e => setConfig({
+                            ...config,
+                            model_config: { ...config.model_config, context_window: e.target.value }
+                          })}
+                        >
+                          <option value="16k">16,384 tokens (Fast)</option>
+                          <option value="32k">32,768 tokens (Default)</option>
+                          <option value="64k">65,536 tokens (Full Repo Context)</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <button className="btn-danger btn-sm" onClick={handleResetAllData}>
-                  Purge All Session Data
-                </button>
-              </div>
+              )}
+
+              {/* ── SubTab 3: Repository, Webhook & Governance ── */}
+              {settingsSubTab === 'repo' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
+                    <span style={{ fontSize: 11, color: '#97e8b0' }}>Webhook Endpoint Security & Sandbox Execution Limits</span>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button className="btn-secondary btn-sm" onClick={() => {
+                        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = 'ghostrepro-config.json'
+                        a.click()
+                        setNotice('Configuration exported as JSON.')
+                      }}>
+                        Export JSON
+                      </button>
+                      <button className="btn-primary btn-sm" disabled={cfgSaving} onClick={() => handleSaveConfig('repo_settings')}>
+                        <Icon name="check" size={11}/> {cfgSaving ? 'Saving…' : 'Save Settings'}
+                      </button>
+                      {savedSuccessSection === 'repo_settings' && (
+                        <span className="chip chip-green">✓ Saved</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>GITHUB WEBHOOK RECEIVER</div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <label style={{ marginBottom: 3 }}>Target Webhook URL</label>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <input readOnly value={config.repo_settings.webhook_url} style={{ flex: 1 }}/>
+                          <button className="btn-secondary btn-sm" onClick={() => { navigator.clipboard?.writeText(config.repo_settings.webhook_url); setNotice('Webhook URL copied!') }}>
+                            <Icon name="copy" size={11}/>
+                          </button>
+                          <button className="btn-primary btn-sm" onClick={handlePingWebhook}>Ping</button>
+                        </div>
+                      </div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <label style={{ marginBottom: 3 }}>Webhook Secret Token</label>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <input
+                            value={config.repo_settings.webhook_secret}
+                            placeholder="whsec_••••••••"
+                            onChange={e => setConfig({
+                              ...config,
+                              repo_settings: { ...config.repo_settings, webhook_secret: e.target.value }
+                            })}
+                            style={{ flex: 1 }}
+                          />
+                          <button className="btn-secondary btn-sm" onClick={() => {
+                            const newSec = `whsec_${Math.random().toString(36).substring(2, 15)}`
+                            setConfig({ ...config, repo_settings: { ...config.repo_settings, webhook_secret: newSec } })
+                            setNotice('New webhook secret generated.')
+                          }}>
+                            Regen
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>EXECUTION & MERGE GATE</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
+                        <div>
+                          <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Merge on Full Verification Pass</strong>
+                          <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                            Merges PRs passing RED&rarr;GREEN proofs and surviving fuzzing.
+                          </div>
+                        </div>
+                        <label className="switch">
+                          <input
+                            type="checkbox"
+                            checked={config.repo_settings.auto_merge_on_pass}
+                            onChange={e => setConfig({
+                              ...config,
+                              repo_settings: { ...config.repo_settings, auto_merge_on_pass: e.target.checked }
+                            })}
+                          />
+                          <span className="slider"/>
+                        </label>
+                      </div>
+                      <div className="form-field" style={{ margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                          <label style={{ margin: 0 }}>Sandbox Execution Timeout</label>
+                          <span className="chip chip-blue" style={{ fontSize: 9 }}>{config.repo_settings.sandbox_timeout_sec} seconds</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="10"
+                          max="120"
+                          value={config.repo_settings.sandbox_timeout_sec}
+                          onChange={e => setConfig({
+                            ...config,
+                            repo_settings: { ...config.repo_settings, sandbox_timeout_sec: Number(e.target.value) }
+                          })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '8px 14px', background: '#1c1414', border: '1px solid #4a2323', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Icon name="alert" size={14}/>
+                      <div>
+                        <strong style={{ fontSize: 10, color: '#ff9a92' }}>Danger Zone · Purge Session & Simulation Data</strong>
+                        <div style={{ fontSize: 8, color: '#c99692' }}>Permanently resets PR queue, bug proofs, and simulation data to zero state.</div>
+                      </div>
+                    </div>
+                    <button className="btn-danger btn-sm" onClick={handleResetAllData}>
+                      Purge All Session Data
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
 
           <footer className="main-footer">
             <span><Icon name="shield" size={13}/> Zero-trust verification engine for open-source repositories</span>

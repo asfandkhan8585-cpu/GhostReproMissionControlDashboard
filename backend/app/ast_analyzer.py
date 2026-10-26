@@ -14,14 +14,18 @@ def calculate_ast_blast_radius(original_code: str, modified_code: str) -> dict:
         return {"error": f"Syntax Error in PR code: {e}"}
 
     orig_funcs = {
-        node.name for node in ast.walk(tree_orig) if isinstance(node, ast.FunctionDef)
+        node.name
+        for node in ast.walk(tree_orig)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     mod_funcs = {
-        node.name for node in ast.walk(tree_mod) if isinstance(node, ast.FunctionDef)
+        node.name
+        for node in ast.walk(tree_mod)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
-    orig_statements = sum(1 for _ in ast.walk(tree_orig))
-    mod_statements = sum(1 for _ in ast.walk(tree_mod))
+    orig_statements = sum(1 for node in ast.walk(tree_orig) if isinstance(node, ast.stmt))
+    mod_statements = sum(1 for node in ast.walk(tree_mod) if isinstance(node, ast.stmt))
     delta_statements = abs(mod_statements - orig_statements)
 
     return {

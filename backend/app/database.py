@@ -4,7 +4,7 @@ Provides zero-dependency, persistent storage for:
 - Maintainer profile & authorized GitHub credentials
 - Monitored repositories and active workspace selection
 - Pull request clearance records, trust scores & AST metrics
-- Autonomous bug reproduction proofs & pytest code
+- Autonomous bug reproduction proofs & pytest code (keyed by repo + issue_number)
 - Slopsquatting threat registry & maintainer whitelist
 - Security policies, LLM configurations, and execution audit logs
 """
@@ -14,21 +14,34 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime, timezone
+from contextlib import contextmanager
 
 DB_DIR = Path(__file__).resolve().parent.parent / "data"
 DB_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DB_DIR / "ghostrepro.db"
 
 
+@contextmanager
 def get_connection():
-    """Returns a connection to the SQLite database with row factory enabled."""
+    """Context manager for SQLite database connection.
+    
+    Guarantees that transactions are committed on clean exit and that
+    the connection is ALWAYS properly closed, preventing descriptor leaks.
+    """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db():
-    """Initializes tables for all GhostRepro data entities."""
+    """Initializes tables and migrations for all GhostRepro data entities."""
     with get_connection() as conn:
         cursor = conn.cursor()
         
@@ -81,24 +94,50 @@ def init_db():
             status TEXT DEFAULT 'QUARANTINED',
             tier TEXT DEFAULT 'QUARANTINE_QUEUE',
             blast_radius_json TEXT,
+            dependencies_json TEXT,
             test_result_json TEXT,
             pipeline_stage TEXT DEFAULT 'QUARANTINE_EVAL',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
         
-        # Bug Reproductions
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS bug_reproductions (
-            issue_number INTEGER PRIMARY KEY,
-            repo TEXT,
-            title TEXT,
-            repro_status TEXT DEFAULT 'RED',
-            test_file TEXT,
-            code TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
+        # Check bug_reproductions schema: ensure composite primary key (repo, issue_number)
+        cursor.execute("PRAGMA table_info(bug_reproductions)")
+        cols = cursor.fetchall()
+        pk_cols = [c["name"] for c in cols if c["pk"] > 0]
+        if cols and pk_cols == ["issue_number"]:
+            # Migrate legacy table with single primary key to composite primary key
+            cursor.execute("ALTER TABLE bug_reproductions RENAME TO bug_reproductions_old")
+            cursor.execute("""
+            CREATE TABLE bug_reproductions (
+                issue_number INTEGER,
+                repo TEXT,
+                title TEXT,
+                repro_status TEXT DEFAULT 'RED',
+                test_file TEXT,
+                code TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (repo, issue_number)
+            )
+            """)
+            cursor.execute("""
+            INSERT OR IGNORE INTO bug_reproductions (issue_number, repo, title, repro_status, test_file, code, created_at)
+            SELECT issue_number, COALESCE(repo, ''), title, repro_status, test_file, code, created_at FROM bug_reproductions_old
+            """)
+            cursor.execute("DROP TABLE bug_reproductions_old")
+        else:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bug_reproductions (
+                issue_number INTEGER,
+                repo TEXT,
+                title TEXT,
+                repro_status TEXT DEFAULT 'RED',
+                test_file TEXT,
+                code TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (repo, issue_number)
+            )
+            """)
         
         # Slopsquatting Threats & Whitelist
         cursor.execute("""
@@ -147,8 +186,6 @@ def init_db():
             config_json TEXT
         )
         """)
-        
-        conn.commit()
 
 
 # Initialize database on module load
@@ -181,7 +218,6 @@ def save_user(user_data: dict, pat: str = ""):
             user_data.get("role", "MAINTAINER"),
             pat[:8] + "..." if pat else ""
         ))
-        conn.commit()
 
 
 def get_latest_user() -> dict | None:
@@ -222,7 +258,6 @@ def save_repository(repo: dict):
             repo.get("language", "Python"),
             repo.get("default_branch", "main"),
         ))
-        conn.commit()
 
 
 def get_all_repositories() -> list[dict]:
@@ -237,36 +272,172 @@ def set_active_repository(full_name: str):
         cursor = conn.cursor()
         cursor.execute("UPDATE repositories SET is_active = 0")
         cursor.execute("UPDATE repositories SET is_active = 1 WHERE full_name = ?", (full_name,))
-        conn.commit()
+
+
+def save_pull_request(pr: dict):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        blast_json = json.dumps(pr.get("blast_radius")) if pr.get("blast_radius") else None
+        deps_json = json.dumps(pr.get("dependencies")) if pr.get("dependencies") else None
+        test_json = json.dumps(pr.get("test_result")) if pr.get("test_result") else None
+        cursor.execute("""
+        INSERT INTO pull_requests (id, number, repo, title, author, author_avatar, author_association, trust_score, status, tier, blast_radius_json, dependencies_json, test_result_json, pipeline_stage, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            number=excluded.number,
+            repo=excluded.repo,
+            title=excluded.title,
+            trust_score=excluded.trust_score,
+            status=excluded.status,
+            tier=excluded.tier,
+            blast_radius_json=excluded.blast_radius_json,
+            dependencies_json=excluded.dependencies_json,
+            test_result_json=excluded.test_result_json,
+            pipeline_stage=excluded.pipeline_stage
+        """, (
+            pr.get("id"),
+            pr.get("number", 0),
+            pr.get("repo", ""),
+            pr.get("title", ""),
+            pr.get("author", ""),
+            pr.get("author_avatar", ""),
+            pr.get("author_association", "NONE"),
+            pr.get("trust_score", 0),
+            pr.get("status", "QUARANTINED"),
+            pr.get("tier", "QUARANTINE_QUEUE"),
+            blast_json,
+            deps_json,
+            test_json,
+            pr.get("pipeline_stage", "QUARANTINE_EVAL"),
+            pr.get("created_at", datetime.now(timezone.utc).isoformat())
+        ))
+
+
+def get_all_pull_requests(repo: str = None) -> list[dict]:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        if repo:
+            rows = cursor.execute("SELECT * FROM pull_requests WHERE repo = ? ORDER BY created_at DESC", (repo,)).fetchall()
+        else:
+            rows = cursor.execute("SELECT * FROM pull_requests ORDER BY created_at DESC").fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["blast_radius"] = json.loads(d["blast_radius_json"]) if d.get("blast_radius_json") else None
+            d["dependencies"] = json.loads(d["dependencies_json"]) if d.get("dependencies_json") else []
+            d["test_result"] = json.loads(d["test_result_json"]) if d.get("test_result_json") else None
+            results.append(d)
+        return results
 
 
 def save_bug_repro(repro: dict):
     with get_connection() as conn:
         cursor = conn.cursor()
+        repo = repro.get("repo", "")
         cursor.execute("""
-        INSERT INTO bug_reproductions (issue_number, repo, title, repro_status, test_file, code)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(issue_number) DO UPDATE SET
-            repo=excluded.repo,
+        INSERT INTO bug_reproductions (issue_number, repo, title, repro_status, test_file, code, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(repo, issue_number) DO UPDATE SET
             title=excluded.title,
             repro_status=excluded.repro_status,
             test_file=excluded.test_file,
             code=excluded.code
         """, (
             repro.get("issue_number"),
-            repro.get("repo", ""),
+            repo,
             repro.get("title", ""),
             repro.get("repro_status", "RED"),
             repro.get("test_file", ""),
-            repro.get("code", "")
+            repro.get("code", ""),
+            repro.get("created_at", datetime.now(timezone.utc).isoformat())
         ))
-        conn.commit()
 
 
-def get_all_bug_repros() -> list[dict]:
+def get_all_bug_repros(repo: str = None) -> list[dict]:
     with get_connection() as conn:
         cursor = conn.cursor()
-        rows = cursor.execute("SELECT * FROM bug_reproductions ORDER BY issue_number DESC").fetchall()
+        if repo:
+            rows = cursor.execute("SELECT * FROM bug_reproductions WHERE repo = ? ORDER BY issue_number DESC", (repo,)).fetchall()
+        else:
+            rows = cursor.execute("SELECT * FROM bug_reproductions ORDER BY issue_number DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+def save_slop_flag(flag: dict):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO slop_flags (package, reason, pr_id, detected_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(package) DO UPDATE SET
+            reason=excluded.reason,
+            pr_id=excluded.pr_id,
+            detected_at=excluded.detected_at
+        """, (
+            flag.get("package", "").lower(),
+            flag.get("reason", ""),
+            flag.get("pr_id", "live-scan"),
+            flag.get("detected_at", datetime.now(timezone.utc).isoformat())
+        ))
+
+
+def get_all_slop_flags() -> list[dict]:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute("SELECT * FROM slop_flags ORDER BY detected_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_slop_flag(package: str):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM slop_flags WHERE package = ?", (package.lower(),))
+
+
+def add_to_whitelist(package: str):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO package_whitelist (package)
+        VALUES (?)
+        ON CONFLICT(package) DO NOTHING
+        """, (package.lower(),))
+
+
+def get_whitelist() -> list[str]:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute("SELECT package FROM package_whitelist ORDER BY package ASC").fetchall()
+        return [r["package"] for r in rows]
+
+
+def remove_from_whitelist(package: str):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM package_whitelist WHERE package = ?", (package.lower(),))
+
+
+def save_pipeline_event(evt: dict):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO pipeline_events (id, pr_id, stage, status, timestamp, message)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
+        """, (
+            evt.get("id"),
+            evt.get("pr_id", ""),
+            evt.get("stage", ""),
+            evt.get("status", "passed"),
+            evt.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            evt.get("message", "")
+        ))
+
+
+def get_pipeline_events(limit: int = 50) -> list[dict]:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute("SELECT * FROM pipeline_events ORDER BY rowid DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -284,7 +455,6 @@ def save_log(log_item: dict):
             log_item.get("level"),
             log_item.get("message")
         ))
-        conn.commit()
 
 
 def get_recent_logs(limit: int = 100) -> list[dict]:
@@ -302,7 +472,6 @@ def save_config(section: str, data: dict):
         VALUES (?, ?)
         ON CONFLICT(section) DO UPDATE SET config_json=excluded.config_json
         """, (section, json.dumps(data)))
-        conn.commit()
 
 
 def get_config(section: str) -> dict | None:
@@ -312,3 +481,16 @@ def get_config(section: str) -> dict | None:
         if row and row["config_json"]:
             return json.loads(row["config_json"])
     return None
+
+
+def get_full_config() -> dict | None:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute("SELECT section, config_json FROM configuration").fetchall()
+        if not rows:
+            return None
+        res = {}
+        for r in rows:
+            if r["config_json"]:
+                res[r["section"]] = json.loads(r["config_json"])
+        return res

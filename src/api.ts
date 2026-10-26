@@ -9,8 +9,8 @@
 
 const API_BASE = 'http://localhost:8000'
 
-export const GROQ_API_KEY = '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'
-export const GROQ_MODEL = 'qwen/qwen3.8-27b'
+export const GROQ_API_KEY = ''
+export const GROQ_MODEL = 'llama-3.3-70b-versatile'
 export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 
 export const GHOSTREPRO_REPRO_PROMPT = `You are GhostRepro Autonomous Reproduction Engine, the core AI agent of the GhostRepro Zero-Trust Gatekeeper.
@@ -154,16 +154,16 @@ export const initialConfig: AppConfig = {
     strict_mode: true,
   },
   model_config: {
-    model_name: 'qwen/qwen3.8-27b (Groq LPU)',
+    model_name: 'llama-3.3-70b-versatile',
     provider: 'Groq Cloud / Open-Source LPU',
     inference_endpoint: 'https://api.groq.com/openai/v1',
     temperature: 0.2,
     context_window: '128k',
-    api_key: GROQ_API_KEY,
+    api_key: '',
   },
   repo_settings: {
     webhook_url: 'http://127.0.0.1:8000/webhook',
-    webhook_secret: 'whsec_ghostrepro_9f82c031d',
+    webhook_secret: '',
     auto_merge_on_pass: false,
     sandbox_timeout_sec: 30,
     quarantine_unverified_bots: true,
@@ -333,18 +333,18 @@ const store = new LocalStore()
 
 /* ─── Generic Fetch Helpers ─────────────────────────────────────────── */
 
-async function fetchJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { signal: AbortSignal.timeout(2000) })
+async function fetchJSON<T>(path: string, timeoutMs = 20000): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { signal: AbortSignal.timeout(timeoutMs) })
   if (!res.ok) throw new Error(`API ${path}: ${res.status}`)
   return res.json()
 }
 
-async function postJSON<T>(path: string, body: unknown = {}): Promise<T> {
+async function postJSON<T>(path: string, body: unknown = {}, timeoutMs = 25000): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(2500),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!res.ok) throw new Error(`API ${path} (${res.status}): ${await res.text()}`)
   return res.json()
@@ -578,31 +578,10 @@ export async function authorizeGitHub(token?: string, username?: string): Promis
     // Offline
   }
 
-  // If no repos found on GitHub API (or offline), initialize default repo for this user
-  if (fetchedRepos.length === 0) {
-    fetchedRepos = [
-      {
-        id: `repo-${Date.now()}`,
-        full_name: `${cleanUsername}/my-project`,
-        name: 'my-project',
-        description: 'Primary repository protected by GhostRepro Zero-Trust Gatekeeper',
-        is_active: true,
-        is_private: false,
-        stars: 0,
-        forks: 0,
-        open_prs: 0,
-        quarantined_prs: 0,
-        repro_tests: 0,
-        language: 'Python',
-        default_branch: 'main',
-      }
-    ]
-  }
-
   store.githubUser = finalUser
   store.repos = fetchedRepos
-  store.activeRepo = fetchedRepos[0]?.full_name || ''
-  store.addLog('CLEARANCE', 'INFO', `GitHub account @${cleanUsername} authorized successfully. ${fetchedRepos.length} repositories ready.`)
+  store.activeRepo = fetchedRepos[0]?.full_name || store.activeRepo || ''
+  store.addLog('CLEARANCE', 'INFO', `GitHub account @${cleanUsername} authorized. ${fetchedRepos.length} repositories ready.`)
   store.addEvent('GITHUB_AUTH', 'passed', `GitHub account @${cleanUsername} authorized (${fetchedRepos.length} repositories connected).`)
   store.save()
 
@@ -697,14 +676,9 @@ export async function syncGitHubRepos(): Promise<{ status: string; count: number
         return { status: 'synced', count: synced.length, repositories: synced }
       }
     }
-  } catch {
-    // Fall through to existing local repos
+    store.addLog('CLEARANCE', 'WARN', 'Remote GitHub sync unreachable. Displaying cached repository list.')
+    return { status: 'offline', count: store.repos.length, repositories: store.repos }
   }
-
-  store.addLog('CLEARANCE', 'INFO', `Refreshed ${store.repos.length} repositories. All active webhooks validated.`)
-  store.addEvent('GITHUB_SYNC', 'passed', `Sync completed. ${store.repos.length} repositories active.`)
-  store.save()
-  return { status: 'synced', count: store.repos.length, repositories: store.repos }
 }
 
 export async function addCustomRepo(repo: { name: string; full_name?: string; description?: string; language?: string }): Promise<GitHubRepo> {
@@ -767,13 +741,14 @@ export async function approveAndMergePR(
     })
     if (res && res.message) {
       const pr = store.prs.find(p => p.number === prNumber && (p.repo === targetRepo || !p.repo))
+      const isSuccess = Boolean(res.success || res.merge_status === 200)
       if (pr) {
-        pr.status = 'PASSED'
-        pr.pipeline_stage = 'MERGED_ON_GITHUB'
-        pr.trust_score = 95
+        pr.status = isSuccess ? 'PASSED' : 'FAILED'
+        pr.pipeline_stage = isSuccess ? 'MERGED_ON_GITHUB' : 'MERGE_FAILED'
+        pr.trust_score = isSuccess ? 95 : 40
       }
       store.save()
-      return { success: res.success || res.merge_status === 200, message: res.message, merge_status: res.merge_status }
+      return { success: isSuccess, message: res.message, merge_status: res.merge_status }
     }
   } catch {
     // Fallback to direct browser GitHub REST API call
@@ -793,7 +768,7 @@ export async function approveAndMergePR(
     headers.Authorization = authVal
   }
 
-  const reviewBody = "🛡️ **GhostRepro Zero-Trust Gatekeeper — Mathematically Verified & Approved**\n\n- ✅ AST Blast-Radius: Passed (< 50 statements)\n- ✅ PyPI Slopsquatting: Passed (0 hallucinated packages)\n- ✅ Pytest Sandbox: Passed (RED ➔ GREEN failure proof verified)\n- ✅ Qwen Adversarial Fuzzing: Passed (128 mutation tests survived, 0 cheats detected)\n\nMaintainer approved & incorporated via GhostRepro Mission Control Dashboard."
+  const reviewBody = `🛡️ **GhostRepro Zero-Trust Gatekeeper**\n\nPull request #${prNumber} approved by maintainer via GhostRepro Mission Control Dashboard.`
 
   let reviewOk = false
   let mergeOk = false
@@ -817,7 +792,7 @@ export async function approveAndMergePR(
         headers,
         body: JSON.stringify({
           commit_title: `Merge pull request #${prNumber} from ${targetRepo} [GhostRepro Verified]`,
-          commit_message: `Mathematically verified and merged by GhostRepro Zero-Trust Gatekeeper.`,
+          commit_message: `Verified and merged by GhostRepro Zero-Trust Gatekeeper.`,
           merge_method: 'squash'
         })
       })
@@ -843,7 +818,7 @@ export async function approveAndMergePR(
       await fetch(`https://api.github.com/repos/${targetRepo}/issues/${prNumber}/comments`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ body: `🛡️ **GhostRepro Gatekeeper**: Pull request #${prNumber} mathematically verified and approved by maintainer.` })
+        body: JSON.stringify({ body: `🛡️ **GhostRepro Gatekeeper**: Pull request #${prNumber} verified and approved by maintainer.` })
       }).catch(() => null)
     }
   } catch (err: any) {
@@ -853,15 +828,15 @@ export async function approveAndMergePR(
   // Update local state
   const pr = store.prs.find(p => p.number === prNumber && (p.repo === targetRepo || !p.repo))
   if (pr) {
-    pr.status = 'PASSED'
-    pr.pipeline_stage = mergeOk ? 'MERGED_ON_GITHUB' : 'APPROVED_ON_GITHUB'
-    pr.trust_score = 90
+    pr.status = mergeOk ? 'PASSED' : 'FAILED'
+    pr.pipeline_stage = mergeOk ? 'MERGED_ON_GITHUB' : 'MERGE_FAILED'
+    pr.trust_score = mergeOk ? 90 : 50
   }
-  store.addEvent('GITHUB_MERGE', mergeOk || reviewOk ? 'passed' : 'failed', finalMessage, `pr-${prNumber}`)
-  store.addLog('MERGE_GATE', mergeOk || reviewOk ? 'PASS' : 'INFO', `GitHub PR #${prNumber}: ${finalMessage}`)
+  store.addEvent('GITHUB_MERGE', mergeOk ? 'passed' : 'failed', finalMessage, `pr-${prNumber}`)
+  store.addLog('MERGE_GATE', mergeOk ? 'PASS' : 'WARN', `GitHub PR #${prNumber}: ${finalMessage}`)
   store.save()
 
-  return { success: mergeOk || reviewOk, message: finalMessage }
+  return { success: mergeOk, message: finalMessage }
 }
 
 export async function authorizeUser(username: string, token?: string): Promise<{ status: string; username: string; message: string }> {
@@ -877,10 +852,10 @@ export async function authorizeUser(username: string, token?: string): Promise<{
     })
     if (res) {
       if (pr) {
-        pr.status = 'PASSED'
-        pr.pipeline_stage = 'MERGED_ON_GITHUB'
-        pr.trust_score = 90
-        pr.test_result = { passed: true, exit_code: 0, output: 'All sandbox pytest checks passed.' }
+        const isSuccess = Boolean(res.github?.success)
+        pr.status = isSuccess ? 'PASSED' : 'FAILED'
+        pr.pipeline_stage = isSuccess ? 'MERGED_ON_GITHUB' : 'MERGE_FAILED'
+        pr.trust_score = isSuccess ? 90 : 50
       }
       store.save()
       return res
@@ -891,16 +866,15 @@ export async function authorizeUser(username: string, token?: string): Promise<{
 
   let ghMessage = `Maintainer authorized @${username}.`
   if (pr) {
-    pr.status = 'PASSED'
-    pr.pipeline_stage = 'MERGED_ON_GITHUB'
-    pr.trust_score = 85
-    pr.test_result = { passed: true, exit_code: 0, output: 'All sandbox pytest checks passed.' }
-    // Actually execute approval and merge on GitHub!
+    // Actually execute approval and merge on GitHub
     const ghRes = await approveAndMergePR(pr.repo, pr.number, effToken)
+    pr.status = ghRes.success ? 'PASSED' : 'FAILED'
+    pr.pipeline_stage = ghRes.success ? 'MERGED_ON_GITHUB' : 'MERGE_FAILED'
+    pr.trust_score = ghRes.success ? 85 : 50
     ghMessage = ghRes.message
   } else {
-    store.addEvent('MANUAL_AUTHORIZE', 'passed', `✅ @${username} authorized by maintainer. Sandbox execution passed.`, 'quarantine')
-    store.addLog('CLEARANCE', 'PASS', `Maintainer released @${username} from quarantine. Sandbox pass recorded.`)
+    store.addEvent('MANUAL_AUTHORIZE', 'passed', `✅ @${username} authorized by maintainer.`, 'quarantine')
+    store.addLog('CLEARANCE', 'PASS', `Maintainer released @${username} from quarantine.`)
   }
   store.save()
   return { status: 'authorized', username, message: ghMessage }
@@ -1007,19 +981,19 @@ def test_repro_issue_${issueNumber}():
   }
 }
 
-export async function runIssueRepro(issueNumber: number): Promise<{ status: string; issue_number: number; repro_status: 'RED' | 'GREEN' }> {
+export async function runIssueRepro(issueNumber: number): Promise<{ status: string; issue_number: number; repro_status: 'RED' | 'GREEN'; details?: string }> {
   try {
-    return await postJSON(`/api/dashboard/issues/${issueNumber}/run`)
-  } catch {
+    const res = await postJSON<any>(`/api/dashboard/issues/${issueNumber}/run`)
     const issue = store.repros.find(r => r.issue_number === issueNumber)
-    if (!issue) throw new Error('Issue not found')
-
-    const newStatus = issue.repro_status === 'RED' ? 'GREEN' : 'RED'
-    issue.repro_status = newStatus
-    store.addLog('REPRO_TEST', newStatus === 'GREEN' ? 'PASS' : 'WARN', `Sandbox execution for #${issueNumber}: status flipped to [${newStatus}].`)
-    store.addEvent('SANDBOX_RUN', 'passed', `Sandbox executed test_repro_${issueNumber}.py: Result [${newStatus}].`)
+    if (issue && res.repro_status) {
+      issue.repro_status = res.repro_status
+      store.save()
+    }
+    return res
+  } catch (err: any) {
+    store.addLog('REPRO_TEST', 'FAIL', `Sandbox run failed for #${issueNumber}: ${err.message || 'Execution error'}`)
     store.save()
-    return { status: 'success', issue_number: issueNumber, repro_status: newStatus }
+    throw new Error(`Sandbox execution failed for #${issueNumber}: ${err.message || 'Execution error'}`)
   }
 }
 
@@ -1290,62 +1264,58 @@ export async function testLLM(): Promise<{ status: string; model: string; endpoi
   try {
     return await postJSON('/api/config/test-llm')
   } catch {
-    // Backend down — try direct Groq ping
+    // Backend down — try direct Groq ping if API key is present
   }
 
   // Direct Groq API ping as fallback
   const start = performance.now()
-  const candidateModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile']
-  let lastError = ''
-  
-  for (const m of candidateModels) {
-    try {
-      const res = await fetch(GROQ_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${store.config.model_config.api_key || GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: m,
-          messages: [{ role: 'user', content: 'Ping GhostRepro gatekeeper.' }],
-          max_tokens: 8,
-        }),
-        signal: AbortSignal.timeout(4000),
-      })
-      if (res.ok) {
-        const latency = Math.round(performance.now() - start)
-        const modelName = `${m} (Groq LPU)`
-        store.addLog('REPRO_TEST', 'PASS', `Groq LPU ping verified (${latency}ms latency) · ${modelName}`)
-        return {
-          status: 'connected',
-          model: modelName,
-          endpoint: store.config.model_config.inference_endpoint,
-          latency_ms: latency,
-          message: `${modelName} responding via Groq LPU in ${latency}ms. Autonomous reproduction & fuzzing active.`,
-        }
-      } else {
-        lastError = `Groq API returned ${res.status}: ${await res.text()}`
-      }
-    } catch (e: any) {
-      lastError = e?.message || String(e)
-    }
+  const apiKey = store.config.model_config.api_key || GROQ_API_KEY
+  if (!apiKey) {
+    throw new Error('Groq API key is not configured. Please add an API key in Settings.')
   }
+  const configuredModel = store.config.model_config.model || 'llama-3.3-70b-versatile'
+  const modelToTest = configuredModel.replace(/\s*\(Groq LPU\)\s*/i, '').trim() || 'llama-3.3-70b-versatile'
 
-  throw new Error(lastError || 'Unable to connect to Groq inference endpoint')
+  try {
+    const res = await fetch(GROQ_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelToTest,
+        messages: [{ role: 'user', content: 'Ping GhostRepro gatekeeper.' }],
+        max_tokens: 8,
+      }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (res.ok) {
+      const latency = Math.round(performance.now() - start)
+      store.addLog('REPRO_TEST', 'PASS', `Groq ping verified (${latency}ms latency) · ${modelToTest}`)
+      return {
+        status: 'connected',
+        model: modelToTest,
+        endpoint: store.config.model_config.inference_endpoint,
+        latency_ms: latency,
+        message: `${modelToTest} responding via Groq in ${latency}ms. Autonomous reproduction & fuzzing active.`,
+      }
+    } else {
+      const errText = await res.text()
+      throw new Error(`Groq API returned ${res.status}: ${errText}`)
+    }
+  } catch (e: any) {
+    throw new Error(e?.message || 'Unable to connect to Groq inference endpoint')
+  }
 }
 
-export async function pingWebhook(): Promise<{ status: string; event: PipelineEvent }> {
+export async function pingWebhook(): Promise<{ status: string; event?: PipelineEvent }> {
   try {
     return await postJSON('/api/config/ping-webhook')
-  } catch {
-    const evt = store.addEvent(
-      'WEBHOOK_PING',
-      'passed',
-      `Webhook ping delivered to ${store.config.repo_settings.webhook_url} (HTTP 200).`
-    )
-    store.addLog('SYSTEM', 'INFO', `Delivered test webhook ping to ${store.config.repo_settings.webhook_url}`)
-    return { status: 'pong', event: evt }
+  } catch (err: any) {
+    store.addLog('SYSTEM', 'FAIL', `Failed to deliver webhook ping: ${err.message || 'Endpoint unreachable'}`)
+    store.save()
+    throw new Error(`Webhook ping failed: ${err.message || 'Endpoint unreachable'}`)
   }
 }
 
@@ -1365,8 +1335,18 @@ export async function calculateAST(originalCode: string, modifiedCode: string): 
       return lines.length
     }
 
-    const extractSymbols = (code: string, keyword: string) => {
-      const regex = new RegExp(`^\\s*${keyword}\\s+([a-zA-Z0-9_]+)`, 'gm')
+    const extractFunctions = (code: string) => {
+      const regex = /^\s*(?:async\s+)?def\s+([a-zA-Z0-9_]+)/gm
+      const matches: string[] = []
+      let match
+      while ((match = regex.exec(code)) !== null) {
+        matches.push(match[1])
+      }
+      return matches
+    }
+
+    const extractClasses = (code: string) => {
+      const regex = /^\s*class\s+([a-zA-Z0-9_]+)/gm
       const matches: string[] = []
       let match
       while ((match = regex.exec(code)) !== null) {
@@ -1379,12 +1359,12 @@ export async function calculateAST(originalCode: string, modifiedCode: string): 
     const modCount = countStatements(modifiedCode)
     const delta = Math.abs(modCount - origCount)
 
-    const origFuncs = extractSymbols(originalCode, 'def')
-    const modFuncs = extractSymbols(modifiedCode, 'def')
+    const origFuncs = extractFunctions(originalCode)
+    const modFuncs = extractFunctions(modifiedCode)
     const addedFuncs = modFuncs.filter(f => !origFuncs.includes(f))
 
-    const origClasses = extractSymbols(originalCode, 'class')
-    const modClasses = extractSymbols(modifiedCode, 'class')
+    const origClasses = extractClasses(originalCode)
+    const modClasses = extractClasses(modifiedCode)
     const addedClasses = modClasses.filter(c => !origClasses.includes(c))
 
     const threshold = store.config.verification_rules.blast_radius_threshold || 50
