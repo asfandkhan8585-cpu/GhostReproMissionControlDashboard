@@ -7,7 +7,7 @@
  * and security flags are computed by the backend; failure states are surfaced honestly.
  */
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
@@ -43,7 +43,14 @@ export type PRRecord = {
   trust_score: number
   status: 'PASSED' | 'REJECTED' | 'QUARANTINED' | 'RUNNING' | 'FAILED'
   tier: string
-  blast_radius: { statement_delta: number; scope_creep_detected: boolean } | null
+  blast_radius: {
+    statement_delta: number
+    scope_creep_detected: boolean
+    additions?: number
+    deletions?: number
+    files_changed?: number
+  } | null
+  dependencies?: string[]
   test_result: { passed: boolean; exit_code: number; output?: string } | null
   created_at: string
   pipeline_stage: string
@@ -64,6 +71,7 @@ export type IssueRepro = {
   title: string
   repro_status: 'RED' | 'GREEN'
   test_file: string
+  code?: string
   created_at: string
 }
 
@@ -207,7 +215,7 @@ export const initialLogs: LogItem[] = []
 /* ─── Generic Fetch Helpers with Per-Operation Timeouts ──────────────── */
 
 async function fetchJSON<T>(path: string, timeoutMs = 10000): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { signal: AbortSignal.timeout(timeoutMs) })
+  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', signal: AbortSignal.timeout(timeoutMs) })
   if (!res.ok) {
     const errorText = await res.text().catch(() => '')
     throw new Error(`API ${path} (${res.status}): ${errorText || res.statusText}`)
@@ -215,9 +223,10 @@ async function fetchJSON<T>(path: string, timeoutMs = 10000): Promise<T> {
   return res.json()
 }
 
-async function postJSON<T>(path: string, body: unknown = {}, timeoutMs = 20000): Promise<T> {
+async function postJSON<T>(path: string, body: unknown = {}, timeoutMs = 90000): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeoutMs),
@@ -368,6 +377,7 @@ export async function whitelistPackage(packageName: string): Promise<{ status: s
 export async function deleteSlopsquat(packageName: string): Promise<{ status: string; package: string }> {
   const res = await fetch(`${API_BASE}/api/slopsquat/${encodeURIComponent(packageName.trim())}`, {
     method: 'DELETE',
+    credentials: 'include',
     signal: AbortSignal.timeout(10000)
   })
   if (!res.ok) {
@@ -402,6 +412,7 @@ export async function getExecutionLogs(): Promise<LogItem[]> {
 export async function clearExecutionLogs(): Promise<{ status: string }> {
   const res = await fetch(`${API_BASE}/api/dashboard/logs`, {
     method: 'DELETE',
+    credentials: 'include',
     signal: AbortSignal.timeout(10000)
   })
   if (!res.ok) {

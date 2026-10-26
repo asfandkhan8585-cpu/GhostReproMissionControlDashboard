@@ -86,12 +86,7 @@ export default function App() {
   const [repos, setRepos] = useState<GitHubRepo[]>(initialRepos)
   const [activeRepo, setActiveRepo] = useState<string>('asfandkhan8585-cpu/GhostReproMissionControlDashboard')
   const [githubModalOpen, setGithubModalOpen] = useState(false)
-  const [githubPatInput, setGithubPatInput] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('github_pat') || (import.meta as any).env?.VITE_GITHUB_TOKEN || ''
-    }
-    return ''
-  })
+  const [githubPatInput, setGithubPatInput] = useState('')
   const [mergingPrNumber, setMergingPrNumber] = useState<number | null>(null)
   const [githubUsernameInput, setGithubUsernameInput] = useState('')
   const [newRepoName, setNewRepoName] = useState('')
@@ -178,9 +173,9 @@ export default function App() {
       }
       if (repList?.repositories) setRepos(repList.repositories)
       if (repList?.active_repo) setActiveRepo(repList.active_repo)
-      if (cfg) setConfig(cfg)
+      if (cfg) setConfig(previous => document.activeElement?.matches('input, textarea, select') ? previous : cfg)
     } catch {
-      // Backend request error
+      setNotice('Dashboard refresh failed. Check backend connectivity and retry.')
     }
   }, [])
 
@@ -334,7 +329,9 @@ export default function App() {
     try {
       const res = await approveAndMergePR(repo, prNumber, githubPatInput || undefined)
       await refreshData()
+      if (!res.success) throw new Error(res.message)
       setNotice(res.message)
+      return res
     } catch (err: any) {
       setNotice(`❌ GitHub Merge failed: ${err.message || 'Failed to complete merge.'}`)
     }
@@ -593,8 +590,8 @@ export default function App() {
             )}
           </select>
           <button
-            className="chip chip-blue"
-            style={{ cursor: 'pointer', padding: '3px 8px', border: 0 }}
+            className="chip chip-blue layout-1"
+
             onClick={() => setGithubModalOpen(true)}
             title="Manage connected repositories"
           >
@@ -602,8 +599,8 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="sync-btn"
-            style={{ padding: '3px 8px', fontSize: 12 }}
+            className="sync-btn layout-2"
+
             onClick={handleSyncRepos}
             disabled={isSyncing}
             title="Synchronize repository states and PRs from GitHub"
@@ -615,30 +612,30 @@ export default function App() {
 
         <div className="header-right">
           <span className="system">
-            <i style={{ background: backendOnline ? '#3fb950' : '#88e49c' }}/>
+            <i style={{ background: backendOnline ? 'var(--ui-3fb950)' : 'var(--ui-88e49c)' }}/>
             {backendOnline ? 'Backend connected · Operational' : 'Client engine online · Ready'}
           </span>
 
-          <span className="model" style={{ cursor: 'pointer' }} onClick={() => { setSettingsSubTab('models'); setTab('Settings'); }}>
+          <span className="model layout-3"  onClick={() => { setSettingsSubTab('models'); setTab('Settings'); }}>
             <span>◈</span> {config.model_config.model_name} <small>{config.model_config.context_window}</small>
           </span>
 
           {/* ── GitHub Account Button ── */}
           {githubUser.authenticated && githubUser.username ? (
             <button
-              className="btn-secondary btn-sm"
+              className="btn-secondary btn-sm layout-4"
               onClick={() => setGithubModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+
             >
               <Icon name="github" size={14}/>
               <span>@{githubUser.username}</span>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3fb950' }}/>
+              <span className="layout-5"/>
             </button>
           ) : (
             <button
-              className="btn-primary btn-sm"
+              className="btn-primary btn-sm layout-6"
               onClick={() => setGithubModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+
             >
               <Icon name="github" size={14}/>
               <span>Connect GitHub</span>
@@ -686,7 +683,7 @@ export default function App() {
             >
               <Icon name={icon}/>
               <span>{label}</span>
-              {label === 'Live Agent Studio' && <span style={{ fontSize: 12, padding: '1px 5px', background: '#1f6feb', color: '#fff', borderRadius: 3, fontWeight: 700, marginLeft: 'auto' }}>LAB</span>}
+              {label === 'Live Agent Studio' && <span className="layout-7">LAB</span>}
               {label === 'Quarantine' && <b>{queue.length}</b>}
               {label === 'Pull requests' && <small>{prs.length}</small>}
             </button>
@@ -734,7 +731,7 @@ export default function App() {
               <h1>{tab === 'Overview' ? 'Mission control' : tab}</h1>
               <p>Autonomous pull request verification, defect reproduction, and security intelligence.</p>
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div className="layout-8">
               <button className="button" onClick={() => setGithubModalOpen(true)}>
                 <Icon name="github" size={14}/> {githubUser.authenticated ? `Manage Repos (${repos.length})` : 'Connect GitHub'}
               </button>
@@ -753,12 +750,12 @@ export default function App() {
           {tab === 'Overview' && (
             <>
               <div className="overview-meta">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <i className="dot" style={{ background: activeRepo ? '#3fb950' : '#8fa092' }}/>
-                  <strong style={{ color: '#c9d1d9' }}>{activeRepo ? `TARGET: ${activeRepo}` : 'NO ACTIVE REPOSITORY CONNECTED'}</strong>
+                <span className="layout-9">
+                  <i className="dot" style={{ background: activeRepo ? 'var(--ui-3fb950)' : 'var(--ui-8fa092)' }}/>
+                  <strong className="layout-10">{activeRepo ? `TARGET: ${activeRepo}` : 'NO ACTIVE REPOSITORY CONNECTED'}</strong>
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#8b949e' }}>
+                <span className="layout-11">
+                  <span className="layout-12">
                     <Icon name="clock" size={12}/> Webhook Listener Active
                   </span>
                   <button
@@ -797,52 +794,29 @@ export default function App() {
                 ))}
               </section>
 
-              {/* ── Active Pipeline ── */}
-              <section className="panel pipeline">
-                <div className="panel-heading">
-                  <div className="section-title">
-                    <Icon name="branch"/>
-                    <h2>Active Pipeline</h2>
-                    <span className="pipeline-id">
-                      {prs.length > 0 ? `Target: PR #${prs[0].number} (${prs[0].repo})` : 'Standby · Waiting for GitHub Webhook Event'}
-                    </span>
-                  </div>
-                  <div className="processing">
-                    <i style={{ background: prs.length > 0 ? '#3fb950' : '#88e49c' }}/>
-                    {prs.length > 0 ? 'Verification in progress' : 'Gatekeeper Ready'}
-                  </div>
-                </div>
-                <div className="steps">
-                  {[
-                    { title: 'Issue opened', sub: 'Reproduction target identified', state: prs.length > 0 ? 'Completed' : 'Standby' },
-                    { title: 'AST parsing', sub: 'Codebase context extracted', state: prs.length > 0 ? 'Completed' : 'Standby' },
-                    { title: 'Reproduction test', sub: 'Standalone assertions generated', state: prs.length > 0 ? 'Completed' : 'Standby' },
-                    { title: 'PR verification', sub: 'Adversarial fuzzing · 128 mutations', state: prs.length > 0 ? 'Processing' : 'Pending' },
-                    { title: 'Merge gate', sub: 'Mathematical verification pass', state: 'Pending' },
-                  ].map((s, i) => (
-                    <div className={`step ${prs.length > 0 && i < 3 ? 'complete' : prs.length > 0 && i === 3 ? 'active' : 'pending'}`} key={s.title}>
-                      <div className="step-track">
-                        <span className="step-circle">{prs.length > 0 && i < 3 ? <Icon name="check" size={15}/> : i + 1}</span>
-                        <div className="step-line"/>
-                      </div>
-                      <strong>{s.title}</strong>
-                      <p>{s.sub}</p>
-                      <span className="step-state">{prs.length > 0 && i === 3 && <i/>}{s.state}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="pipeline-footer">
-                  <span>
-                    <span className="dot"/> Sandbox <code>sbx_8f2a91</code>
-                    <span className="footer-sep">|</span> Isolated Docker container
-                    <span className="footer-sep">|</span> Webhook URL: <code>{config.repo_settings.webhook_url}</code>
+              {/* ── Operational Control Bar ── */}
+              <div className="panel layout-13" >
+                <div className="layout-14">
+                  <Icon name="shield" size={18} className="layout-15"/>
+                  <span className="layout-16">
+                    Gatekeeper Active: <strong>{activeRepo}</strong>
                   </span>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => handleSimulateIncomingPR(activeRepo)}>+ Fetch Open PRs from GitHub</button>
-                    <button onClick={() => setTab('Execution logs')}>View live execution <span>↗</span></button>
-                  </div>
+                  <span className="chip chip-green layout-17" >
+                    Zero-Trust Active
+                  </span>
+                  <span className="layout-18">
+                    Webhook: <code>{config.repo_settings.webhook_url}</code>
+                  </span>
                 </div>
-              </section>
+                <div className="layout-19">
+                  <button className="btn-secondary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                    + Fetch Open PRs from GitHub
+                  </button>
+                  <button className="btn-secondary btn-sm" onClick={() => setTab('Execution logs')}>
+                    View Live Execution ↗
+                  </button>
+                </div>
+              </div>
 
               {/* ── Scorecards + Quarantine / Live Activity Split View ── */}
               <div className="data-grid">
@@ -879,9 +853,9 @@ export default function App() {
                       </tbody>
                     </table>
                     {!sortedPrs.length && (
-                      <div className="empty" style={{ padding: 24 }}>
+                      <div className="empty layout-20" >
                         No pull requests under review yet.
-                        <div style={{ marginTop: 8 }}>
+                        <div className="layout-21">
                           <button className="btn-secondary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
                             + Fetch PRs from GitHub
                           </button>
@@ -897,17 +871,17 @@ export default function App() {
 
                 <section className="panel quarantine">
                   <div className="panel-heading">
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <div className="layout-22">
                       <button
-                        className={`chip ${overviewRightTab === 'quarantine' ? 'chip-amber' : ''}`}
-                        style={{ cursor: 'pointer', padding: '3px 8px', border: 0 }}
+                        className={(`chip ${overviewRightTab === 'quarantine' ? 'chip-amber' : ''}`) + ' layout-23'}
+
                         onClick={() => setOverviewRightTab('quarantine')}
                       >
                         <Icon name="shield" size={12}/> Quarantine ({queue.length})
                       </button>
                       <button
-                        className={`chip ${overviewRightTab === 'activity' ? 'chip-green' : ''}`}
-                        style={{ cursor: 'pointer', padding: '3px 8px', border: 0 }}
+                        className={(`chip ${overviewRightTab === 'activity' ? 'chip-green' : ''}`) + ' layout-24'}
+
                         onClick={() => setOverviewRightTab('activity')}
                       >
                         <Icon name="activity" size={12}/> Live Stream ({events.length})
@@ -927,9 +901,9 @@ export default function App() {
                               <strong>{pr.author}</strong>
                               <span>PR #{pr.number} <span>·</span> {timeAgo(pr.created_at)}</span>
                             </div>
-                            <span className="external" style={{ cursor: 'pointer' }} onClick={() => setNotice(`Viewing PR #${pr.number} code changes`)}>↗</span>
+                            <span className="external layout-25"  onClick={() => setNotice(`Viewing PR #${pr.number} code changes`)}>↗</span>
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div className="layout-26">
                             {pr.title}
                           </div>
                           <div className="risk">
@@ -941,7 +915,7 @@ export default function App() {
                               disabled={authorizing === pr.author}
                               onClick={() => handleAuthorizePR(pr.author)}
                               title="Authorize and merge pull request on GitHub"
-                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                              className="layout-27"
                             >
                               <Icon name="check" size={12}/> {authorizing === pr.author ? 'Merging on GitHub…' : 'Authorize & Merge on GitHub ↗'}
                             </button>
@@ -950,9 +924,9 @@ export default function App() {
                         </div>
                       ))}
                       {!queue.length && (
-                        <div className="empty" style={{ padding: 24 }}>
+                        <div className="empty layout-28" >
                           All clear. No contributors awaiting review.
-                          <div style={{ marginTop: 8 }}>
+                          <div className="layout-29">
                             <button className="btn-secondary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
                               + Fetch Quarantined PRs
                             </button>
@@ -964,17 +938,17 @@ export default function App() {
                     <div className="table-scroll">
                       {events.length > 0 ? (
                         events.map(evt => (
-                          <div key={evt.id} style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--line)', alignItems: 'flex-start', fontSize: 12 }}>
+                          <div key={evt.id} className="layout-30">
                             <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 3, flexShrink: 0, background: evt.status === 'passed' ? 'var(--green)' : 'var(--red)' }}/>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, letterSpacing: '0.6px', color: 'var(--muted)' }}>{evt.stage}</div>
-                              <div style={{ color: '#c9d1d9', lineHeight: 1.3 }}>{evt.message}</div>
-                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{timeAgo(evt.timestamp)}</div>
+                            <div className="layout-31">
+                              <div className="layout-32">{evt.stage}</div>
+                              <div className="layout-33">{evt.message}</div>
+                              <div className="layout-34">{timeAgo(evt.timestamp)}</div>
                             </div>
                           </div>
                         ))
                       ) : (
-                        <div className="empty" style={{ padding: 24 }}>
+                        <div className="empty layout-35" >
                           No events recorded yet. Connect a repository or click "Run Full Sandbox Suite" to begin.
                         </div>
                       )}
@@ -993,24 +967,14 @@ export default function App() {
             <LiveAgentStudio
               activeRepo={activeRepo}
               config={config}
+              prs={prs}
+              repros={repros}
+              onFetchPRs={() => handleSimulateIncomingPR(activeRepo)}
+              onGoToRepros={() => setTab('Bug reproductions')}
               initialScenarioId={studioScenario}
               setNotice={setNotice}
               onMergePR={handleMergePR}
-              onRecordActivity={(evt, log) => {
-                setEvents(prev => [evt, ...prev.slice(0, 30)])
-                setExecutionLogs(prev => [log, ...prev.slice(0, 100)])
-                setMetrics(prev => ({
-                  ...prev,
-                  pipeline_events_24h: prev.pipeline_events_24h + 1
-                }))
-              }}
-              onVerifyFix={(issueNum) => {
-                setRepros(prev => prev.map(r => r.issue_number === issueNum ? { ...r, repro_status: 'GREEN' } : r))
-                setMetrics(prev => ({
-                  ...prev,
-                  active_red_tests: Math.max(0, prev.active_red_tests - 1)
-                }))
-              }}
+
             />
           )}
 
@@ -1025,7 +989,7 @@ export default function App() {
                   <h2>Pull Request Verification Command Center</h2>
                   <span className="count">{prs.length}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div className="layout-36">
                   <button className="btn-secondary btn-sm" onClick={() => setReverse(!reverse)}>
                     Sort: {reverse ? 'Oldest First' : 'Newest First'}
                   </button>
@@ -1069,7 +1033,7 @@ export default function App() {
                           </div>
                         </td>
                         <td>
-                          <code style={{ fontSize: 12, color: '#9bb0a0' }}>{r.repo.split('/')[1] || r.repo}</code>
+                          <code className="layout-37">{r.repo.split('/')[1] || r.repo}</code>
                         </td>
                         <td><span className={`badge ${badgeClass(r.status)}`}><i/>{mapStatus(r.status)}</span></td>
                         <td>
@@ -1077,11 +1041,11 @@ export default function App() {
                         </td>
                         <td>
                           {r.blast_radius ? (
-                            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: r.blast_radius.statement_delta > 50 ? '#ff8a80' : '#88e49c' }}>
+                            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: r.blast_radius.statement_delta > 50 ? 'var(--ui-ff8a80)' : 'var(--ui-88e49c)' }}>
                               Δ{r.blast_radius.statement_delta} {r.blast_radius.scope_creep_detected ? '🚨' : '✓'}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--muted)', fontSize: 12 }}>Pending</span>
+                            <span className="layout-38">Pending</span>
                           )}
                         </td>
                         <td>
@@ -1089,13 +1053,13 @@ export default function App() {
                         </td>
                         <td>
                           {r.status === 'QUARANTINED' ? (
-                            <div style={{ display: 'flex', gap: 6 }}>
+                            <div className="layout-39">
                               <button
-                                className="btn-primary btn-sm"
+                                className="btn-primary btn-sm layout-40"
                                 disabled={authorizing === r.author}
                                 onClick={() => handleAuthorizePR(r.author)}
                                 title="Authorize and incorporate pull request into GitHub"
-                                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+
                               >
                                 <Icon name="check" size={12}/> {authorizing === r.author ? 'Merging…' : 'Authorize & Merge on GitHub ↗'}
                               </button>
@@ -1104,16 +1068,16 @@ export default function App() {
                               </button>
                             </div>
                           ) : r.status === 'PASSED' ? (
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <div className="layout-41">
                               {r.pipeline_stage === 'MERGED_ON_GITHUB' ? (
-                                <span className="chip chip-green" style={{ fontSize: 12 }}>✓ Merged on GitHub</span>
+                                <span className="chip chip-green layout-42" >✓ Merged on GitHub</span>
                               ) : (
                                 <button
-                                  className="btn-primary btn-sm"
+                                  className="btn-primary btn-sm layout-43"
                                   disabled={mergingPrNumber === r.number}
                                   onClick={() => handleMergePR(r.repo, r.number)}
                                   title="Review, approve, and merge PR directly on GitHub"
-                                  style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+
                                 >
                                   <Icon name="merge" size={12}/> {mergingPrNumber === r.number ? 'Merging…' : 'Approve & Merge on GitHub ↗'}
                                 </button>
@@ -1122,16 +1086,16 @@ export default function App() {
                                 href={`https://github.com/${r.repo}/pull/${r.number}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="btn-secondary btn-sm"
-                                style={{ padding: '2px 6px', fontSize: 12 }}
+                                className="btn-secondary btn-sm layout-44"
+
                                 title="Open Pull Request on GitHub"
                               >
                                 GitHub ↗
                               </a>
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              <span className="chip chip-red" style={{ fontSize: 12 }}>Blocked</span>
+                            <div className="layout-45">
+                              <span className="chip chip-red layout-46" >Blocked</span>
                               <button className="btn-secondary btn-sm" onClick={() => setNotice(`Viewing audit logs for PR #${r.number}`)}>
                                 Audit Log
                               </button>
@@ -1143,13 +1107,13 @@ export default function App() {
                   </tbody>
                 </table>
                 {!sortedPrs.length && (
-                  <div style={{ padding: 40, textAlign: 'center' }}>
+                  <div className="layout-47">
                     <Icon name="branch" size={32}/>
-                    <h3 style={{ margin: '12px 0 4px', color: '#91b69c', fontSize: 15 }}>No Pull Requests Under Review</h3>
-                    <p style={{ color: '#778a7d', fontSize: 12, maxWidth: 440, margin: 'auto' }}>
+                    <h3 className="layout-48">No Pull Requests Under Review</h3>
+                    <p className="layout-49">
                       GhostRepro is actively monitoring <code>{activeRepo || 'your repository'}</code> for incoming PR webhook events. Click below to fetch real open PRs from GitHub.
                     </p>
-                    <button className="btn-primary btn-sm" style={{ marginTop: 14 }} onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                    <button className="btn-primary btn-sm layout-50"  onClick={() => handleSimulateIncomingPR(activeRepo)}>
                       <Icon name="plus" size={13}/> Fetch Open Pull Requests
                     </button>
                   </div>
@@ -1162,18 +1126,18 @@ export default function App() {
               TAB: QUARANTINE
              ════════════════════════════════════════════════════════════════ */}
           {tab === 'Quarantine' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ background: '#1b1713', border: '1px solid #3f2f1f', borderRadius: 6, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="layout-51">
+              <div className="layout-52">
+                <div className="layout-53">
                   <Icon name="shield" size={18}/>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: 12, color: '#f3c988' }}>Zero-Trust Quarantine Sandbox</h3>
-                    <p style={{ margin: '1px 0 0', color: '#a89477', fontSize: 12 }}>
+                    <h3 className="layout-54">Zero-Trust Quarantine Sandbox</h3>
+                    <p className="layout-55">
                       Code from first-time contributors and unverified bots is held in quarantine until human clearance.
                     </p>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div className="layout-56">
                   <button className="btn-secondary btn-sm" onClick={() => handleSimulateIncomingPR(activeRepo)}>
                     + Fetch PRs for Review
                   </button>
@@ -1183,26 +1147,26 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+              <div className="layout-57">
                 {queue.map(pr => (
-                  <div key={pr.id} style={{ background: '#131c17', border: '1px solid #304234', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div key={pr.id} className="layout-58">
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="layout-59">
+                        <div className="layout-60">
                           <span className="avatar avatar-1">{initials(pr.author)}</span>
                           <div>
-                            <strong style={{ fontSize: 12, color: '#e4e7e3' }}>{pr.author}</strong>
-                            <div style={{ fontSize: 12, color: '#8fa092' }}>PR #{pr.number} · {timeAgo(pr.created_at)}</div>
+                            <strong className="layout-61">{pr.author}</strong>
+                            <div className="layout-62">PR #{pr.number} · {timeAgo(pr.created_at)}</div>
                           </div>
                         </div>
                         <span className="chip chip-red">HELD</span>
                       </div>
 
-                      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 500, color: '#c9d8cc' }}>
+                      <div className="layout-63">
                         {pr.title}
                       </div>
 
-                      <div style={{ marginTop: 8, padding: 8, background: '#16221a', borderRadius: 4, fontSize: 12, color: '#9bb0a0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                      <div className="layout-64">
                         <div><strong>Repo:</strong> {pr.repo}</div>
                         <div><strong>Tier:</strong> {pr.tier}</div>
                         <div><strong>Role:</strong> {pr.author_association || 'NONE'}</div>
@@ -1210,10 +1174,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <div className="layout-65">
                       <button
-                        className="btn-primary btn-sm"
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                        className="btn-primary btn-sm layout-66"
+
                         disabled={authorizing === pr.author}
                         onClick={() => handleAuthorizePR(pr.author)}
                         title="Authorize and merge pull request on GitHub"
@@ -1227,11 +1191,11 @@ export default function App() {
                   </div>
                 ))}
                 {!queue.length && (
-                  <div style={{ gridColumn: '1/-1', padding: 36, textAlign: 'center', background: '#131b17', border: '1px solid var(--line)', borderRadius: 6 }}>
+                  <div className="layout-67">
                     <Icon name="check" size={26}/>
-                    <h3 style={{ margin: '8px 0 3px', color: '#91b69c', fontSize: 13 }}>Quarantine Queue is Clear</h3>
-                    <p style={{ color: '#778a7d', fontSize: 12 }}>No pull requests are currently blocked or awaiting maintainer clearance.</p>
-                    <button className="btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={() => handleSimulateIncomingPR(activeRepo)}>
+                    <h3 className="layout-68">Quarantine Queue is Clear</h3>
+                    <p className="layout-69">No pull requests are currently blocked or awaiting maintainer clearance.</p>
+                    <button className="btn-secondary btn-sm layout-70"  onClick={() => handleSimulateIncomingPR(activeRepo)}>
                       + Fetch PRs for Review
                     </button>
                   </div>
@@ -1246,21 +1210,21 @@ export default function App() {
               TAB: SLOPSQUATTING THREAT INTEL (DECLUTTERED)
              ════════════════════════════════════════════════════════════════ */}
           {tab === 'Slopsquatting' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="layout-71">
               {/* Sleek Minimal Telemetry Strip */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="layout-72">
+                <div className="layout-73">
                   <Icon name="package" size={16}/>
-                  <strong style={{ fontSize: 12, color: '#e4e7e3' }}>PyPI Anti-Slopsquatting Defense</strong>
-                  <span style={{ fontSize: 12, color: '#7e9184' }}>· Real-time dependency threat intelligence</span>
+                  <strong className="layout-74">PyPI Anti-Slopsquatting Defense</strong>
+                  <span className="layout-75">· Real-time dependency threat intelligence</span>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="layout-76">
                   <span className="chip chip-red">Blocked: {slopFlags.length}</span>
                   <span className="chip chip-green">Whitelisted: {whitelist.length}</span>
                   <span className="chip chip-blue">PyPI JSON API: Online</span>
                   <button
-                    className="btn-primary btn-sm"
-                    style={{ background: '#1b4d32', borderColor: '#2e7d52', cursor: 'pointer', padding: '3px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+                    className="btn-primary btn-sm layout-77"
+
                     disabled={autoScanning}
                     onClick={handleAutoScanRepo}
                   >
@@ -1272,23 +1236,23 @@ export default function App() {
 
               {/* Automated Scan Results Panel (Zero Manual Typing) */}
               {autoScanResults.length > 0 && (
-                <div style={{ background: '#121a15', border: '1px solid #233b2a', borderRadius: 6, padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div className="layout-78">
+                  <div className="layout-79">
+                    <div className="layout-80">
                       <Icon name="check" size={14} />
-                      <strong style={{ fontSize: 12, color: '#97e8b0' }}>
+                      <strong className="layout-81">
                         Automated PyPI Dependency Scan ({autoScanResults.length} packages discovered & verified)
                       </strong>
                     </div>
                     <span className="chip chip-green">Automated Zero-Input Mode</span>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div className="layout-82">
                     {autoScanResults.map((pkgRes, i) => (
                       <div
                         key={i}
                         style={{
-                          background: pkgRes.is_threat ? '#2b1414' : '#101f16',
-                          border: `1px solid ${pkgRes.is_threat ? '#632b27' : '#275237'}`,
+                          background: pkgRes.is_threat ? 'var(--ui-2b1414)' : 'var(--ui-101f16)',
+                          border: `1px solid ${pkgRes.is_threat ? 'var(--ui-632b27)' : 'var(--ui-275237)'}`,
                           borderRadius: 4,
                           padding: '6px 10px',
                           display: 'flex',
@@ -1297,19 +1261,19 @@ export default function App() {
                           fontSize: 12,
                         }}
                       >
-                        <strong style={{ color: pkgRes.is_threat ? '#ff8c82' : '#d2ecd7', fontFamily: "'IBM Plex Mono', monospace" }}>
+                        <strong style={{ color: pkgRes.is_threat ? 'var(--ui-ff8c82)' : 'var(--ui-d2ecd7)', fontFamily: "'IBM Plex Mono', monospace" }}>
                           {pkgRes.package}
                         </strong>
-                        <span className={`chip ${pkgRes.is_threat ? 'chip-red' : 'chip-green'}`} style={{ fontSize: 12 }}>
+                        <span className={(`chip ${pkgRes.is_threat ? 'chip-red' : 'chip-green'}`) + ' layout-83'} >
                           {pkgRes.status}
                         </span>
                         {pkgRes.latest_version && (
-                          <span style={{ fontSize: 12, color: '#7a9682' }}>v{pkgRes.latest_version}</span>
+                          <span className="layout-84">v{pkgRes.latest_version}</span>
                         )}
                         {pkgRes.is_threat && (
                           <button
-                            className="btn-primary btn-sm"
-                            style={{ fontSize: 12, padding: '1px 5px' }}
+                            className="btn-primary btn-sm layout-85"
+
                             onClick={() => handleWhitelist(pkgRes.package)}
                           >
                             Whitelist
@@ -1322,24 +1286,24 @@ export default function App() {
               )}
 
               {/* Streamlined Live PyPI Scanner */}
-              <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: '12px 16px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+              <div className="layout-86">
+                <div className="layout-87">
                   <div>
-                    <h4 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Manual Package Query (Optional)</h4>
-                    <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 12 }}>Packages in PRs and workspace are scanned automatically. Use this for quick manual checks.</p>
+                    <h4 className="layout-88">Manual Package Query (Optional)</h4>
+                    <p className="layout-89">Packages in PRs and workspace are scanned automatically. Use this for quick manual checks.</p>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12, color: '#6e8073' }}>Quick tests:</span>
-                    <button className="chip chip-red" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('reqeusts'); handleScanPackage('reqeusts') }}>reqeusts (Typo)</button>
-                    <button className="chip chip-amber" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('colorsys2'); handleScanPackage('colorsys2') }}>colorsys2 (Ghost)</button>
-                    <button className="chip chip-green" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('requests'); handleScanPackage('requests') }}>requests (Legit)</button>
-                    <button className="chip chip-blue" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('fastapi'); handleScanPackage('fastapi') }}>fastapi (Legit)</button>
+                  <div className="layout-90">
+                    <span className="layout-91">Quick tests:</span>
+                    <button className="chip chip-red layout-92"  onClick={() => { setScanInput('reqeusts'); handleScanPackage('reqeusts') }}>reqeusts (Typo)</button>
+                    <button className="chip chip-amber layout-93"  onClick={() => { setScanInput('colorsys2'); handleScanPackage('colorsys2') }}>colorsys2 (Ghost)</button>
+                    <button className="chip chip-green layout-94"  onClick={() => { setScanInput('requests'); handleScanPackage('requests') }}>requests (Legit)</button>
+                    <button className="chip chip-blue layout-95"  onClick={() => { setScanInput('fastapi'); handleScanPackage('fastapi') }}>fastapi (Legit)</button>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div className="layout-96">
                   <input
-                    style={{ flex: 1, padding: '6px 10px', background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e4e7e3', fontSize: 12, fontFamily: "'IBM Plex Mono', monospace" }}
+                    className="layout-97"
                     placeholder="Enter package name to test on PyPI (e.g. reqeusts, colorsys2, numpy)..."
                     value={scanInput}
                     onChange={e => setScanInput(e.target.value)}
@@ -1352,25 +1316,25 @@ export default function App() {
 
                 {/* Scan Result Banner */}
                 {scanResult && (
-                  <div style={{ marginTop: 8, padding: 10, background: scanResult.is_threat ? '#251615' : '#14241b', border: `1px solid ${scanResult.is_threat ? '#5c2420' : '#274a34'}`, borderRadius: 5 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: 12, color: scanResult.is_threat ? '#ff9a92' : '#88e49c' }}>
+                  <div style={{ marginTop: 8, padding: 10, background: scanResult.is_threat ? 'var(--ui-251615)' : 'var(--ui-14241b)', border: `1px solid ${scanResult.is_threat ? 'var(--ui-5c2420)' : 'var(--ui-274a34)'}`, borderRadius: 5 }}>
+                    <div className="layout-98">
+                      <strong style={{ fontSize: 12, color: scanResult.is_threat ? 'var(--ui-ff9a92)' : 'var(--ui-88e49c)' }}>
                         {scanResult.is_threat ? '🛑 Hallucinated / Squatted Threat Detected' : '✅ Verified PyPI Package'}
                       </strong>
                       <span className={`chip ${scanResult.is_threat ? 'chip-red' : 'chip-green'}`}>
                         {scanResult.status}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12, color: '#c3d2c6', marginTop: 2 }}>
+                    <div className="layout-99">
                       {scanResult.message}
                     </div>
                     {scanResult.latest_version && (
-                      <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
+                      <div className="layout-100">
                         Latest Version: <code>v{scanResult.latest_version}</code> · Author: {scanResult.author || 'PyPI Community'}
                       </div>
                     )}
-                    <div style={{ marginTop: 6 }}>
-                      <button className="btn-primary btn-sm" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => handleWhitelist(scanResult.package)}>
+                    <div className="layout-101">
+                      <button className="btn-primary btn-sm layout-102"  onClick={() => handleWhitelist(scanResult.package)}>
                         + Add to Whitelist
                       </button>
                     </div>
@@ -1379,36 +1343,36 @@ export default function App() {
               </div>
 
               {/* Decluttered 2-Column Grid: Blocked Packages & Whitelist */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 14 }}>
+              <div className="layout-103">
                 {/* Blocked Packages Card */}
-                <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div className="layout-104">
+                  <div className="layout-105">
+                    <div className="layout-106">
                       <Icon name="alert" size={13}/>
-                      <h4 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Blocked Threats</h4>
+                      <h4 className="layout-107">Blocked Threats</h4>
                     </div>
                     <span className="count red-count">{slopFlags.length}</span>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 380, overflowY: 'auto' }}>
+                  <div className="layout-108">
                     {slopFlags.map((s, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#101713', border: '1px solid #362220', borderRadius: 4 }}>
+                      <div key={idx} className="layout-109">
                         <div>
-                          <strong style={{ font: "12px 'IBM Plex Mono'", color: '#ff9a92' }}>{s.package}</strong>
-                          <div style={{ fontSize: 12, color: '#889e8f' }}>{s.reason}</div>
+                          <strong className="layout-110">{s.package}</strong>
+                          <div className="layout-111">{s.reason}</div>
                         </div>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 12 }} onClick={() => handleWhitelist(s.package)}>
+                        <div className="layout-112">
+                          <button className="btn-secondary btn-sm layout-113"  onClick={() => handleWhitelist(s.package)}>
                             Whitelist
                           </button>
-                          <button className="btn-danger btn-sm" style={{ padding: '2px 6px', fontSize: 12 }} onClick={() => handleDeleteSlopFlag(s.package)}>
+                          <button className="btn-danger btn-sm layout-114"  onClick={() => handleDeleteSlopFlag(s.package)}>
                             Dismiss
                           </button>
                         </div>
                       </div>
                     ))}
                     {!slopFlags.length && (
-                      <div style={{ padding: 24, textAlign: 'center', color: '#6f8374', fontSize: 12 }}>
+                      <div className="layout-115">
                         ✓ Zero active dependency threats detected.
                       </div>
                     )}
@@ -1416,27 +1380,27 @@ export default function App() {
                 </div>
 
                 {/* Whitelist Badges Card */}
-                <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 4, flexShrink: 0 }}>
-                    <h4 style={{ margin: 0, fontSize: 12, color: '#a5bda7' }}>Approved Whitelist ({whitelist.length})</h4>
-                    <form onSubmit={handleAddWhitelistPackage} style={{ display: 'flex', gap: 4 }}>
+                <div className="layout-116">
+                  <div className="layout-117">
+                    <h4 className="layout-118">Approved Whitelist ({whitelist.length})</h4>
+                    <form onSubmit={handleAddWhitelistPackage} className="layout-119">
                       <input
-                        style={{ padding: '3px 6px', background: '#101713', border: '1px solid #334537', borderRadius: 3, color: '#e4e7e3', fontSize: 12, width: 85 }}
+                        className="layout-120"
                         placeholder="Package..."
                         value={newWhitelistPkg}
                         onChange={e => setNewWhitelistPkg(e.target.value)}
                       />
-                      <button type="submit" className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 12 }}>+ Add</button>
+                      <button type="submit" className="btn-secondary btn-sm layout-121" >+ Add</button>
                     </form>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 380, overflowY: 'auto', alignContent: 'flex-start' }}>
+                  <div className="layout-122">
                     {whitelist.map(pkg => (
-                      <span key={pkg} className="chip chip-green" style={{ padding: '3px 8px', fontSize: 12 }}>
+                      <span key={pkg} className="chip chip-green layout-123" >
                         ✓ {pkg}
                       </span>
                     ))}
                     {whitelist.length === 0 && (
-                      <div style={{ color: '#6f8374', fontSize: 12, padding: '8px 0' }}>
+                      <div className="layout-124">
                         No whitelisted packages. Add safe packages above.
                       </div>
                     )}
@@ -1450,20 +1414,20 @@ export default function App() {
               TAB: EXECUTION LOGS
              ════════════════════════════════════════════════════════════════ */}
           {tab === 'Execution logs' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="layout-125">
               {/* Workstation Console Controls */}
-              <div style={{ background: '#141c18', border: '1px solid #36493b', borderRadius: 6, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="layout-126">
+                <div className="layout-127">
                   <Icon name="terminal" size={18}/>
                   <div>
-                    <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Interactive Sandbox Console Workstation</strong>
-                    <div style={{ fontSize: 12, color: '#8fa092' }}>
+                    <strong className="layout-128">Interactive Sandbox Console Workstation</strong>
+                    <div className="layout-129">
                       Ephemeral sandbox <code>sbx_8f2a91</code> · Python 3.12 · pytest 8.3.2 · vLLM {config.model_config.model_name}
                     </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div className="layout-130">
                   <button className="btn-primary btn-sm" onClick={handleTriggerFullTest}>
                     <Icon name="play" size={11}/> Run Sandbox Suite
                   </button>
@@ -1493,26 +1457,26 @@ export default function App() {
               </div>
 
               {/* Log Filters & Search Bar */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', background: '#121b16', padding: '6px 12px', borderRadius: 6, border: '1px solid var(--line)', flexShrink: 0 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div className="layout-131">
+                <div className="layout-132">
                   <Icon name="search" size={13}/>
                   <input
-                    style={{ background: 'transparent', border: 0, outline: 'none', color: '#cad6ca', fontSize: 12, width: 120 }}
+                    className="layout-133"
                     placeholder="Search logs..."
                     value={logSearchQuery}
                     onChange={e => setLogSearchQuery(e.target.value)}
                   />
                 </div>
 
-                <div style={{ width: 1, height: 16, background: 'var(--line)' }}/>
+                <div className="layout-134"/>
 
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: '#7a8e80' }}>Stage:</span>
+                <div className="layout-135">
+                  <span className="layout-136">Stage:</span>
                   {['ALL', 'SYSTEM', 'CLEARANCE', 'AST_ANALYSIS', 'DEPENDENCY_SCAN', 'REPRO_TEST', 'FUZZING', 'MERGE_GATE', 'SANDBOX'].map(st => (
                     <button
                       key={st}
-                      className={`chip ${logStageFilter === st ? 'chip-green' : ''}`}
-                      style={{ cursor: 'pointer', fontSize: 12, padding: '1px 5px' }}
+                      className={(`chip ${logStageFilter === st ? 'chip-green' : ''}`) + ' layout-137'}
+
                       onClick={() => setLogStageFilter(st)}
                     >
                       {st}
@@ -1520,13 +1484,13 @@ export default function App() {
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginLeft: 'auto' }}>
-                  <span style={{ fontSize: 12, color: '#7a8e80' }}>Level:</span>
+                <div className="layout-138">
+                  <span className="layout-139">Level:</span>
                   {['ALL', 'INFO', 'WARN', 'ERROR', 'PASS'].map(lv => (
                     <button
                       key={lv}
-                      className={`chip ${logLevelFilter === lv ? 'chip-blue' : ''}`}
-                      style={{ cursor: 'pointer', fontSize: 12, padding: '1px 5px' }}
+                      className={(`chip ${logLevelFilter === lv ? 'chip-blue' : ''}`) + ' layout-140'}
+
                       onClick={() => setLogLevelFilter(lv)}
                     >
                       {lv}
@@ -1536,25 +1500,25 @@ export default function App() {
               </div>
 
               {/* Full Terminal Window */}
-              <div style={{ background: '#0a100d', border: '1px solid #2d3f33', borderRadius: 6, minHeight: 460, maxHeight: 680, overflowY: 'auto', padding: 14, fontFamily: "'IBM Plex Mono', monospace" }}>
+              <div className="layout-141">
                 {filteredLogs.map(log => (
-                  <div key={log.id} className="log-entry" style={{ padding: '3px 0', borderBottom: '1px solid #142018', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: '#5b7061', fontSize: 12 }}>[{log.timestamp}]</span>
-                    <span className="chip" style={{ fontSize: 12, padding: '1px 4px', color: '#9bc2a4', background: '#122018' }}>
+                  <div key={log.id} className="log-entry layout-142" >
+                    <span className="layout-143">[{log.timestamp}]</span>
+                    <span className="chip layout-144" >
                       {log.stage}
                     </span>
-                    <span className={`chip ${log.level === 'PASS' ? 'chip-green' : log.level === 'WARN' ? 'chip-amber' : log.level === 'ERROR' || log.level === 'ALERT' ? 'chip-red' : 'chip-blue'}`} style={{ fontSize: 12, padding: '1px 4px' }}>
+                    <span className={(`chip ${log.level === 'PASS' ? 'chip-green' : log.level === 'WARN' ? 'chip-amber' : log.level === 'ERROR' || log.level === 'ALERT' ? 'chip-red' : 'chip-blue'}`) + ' layout-145'} >
                       {log.level}
                     </span>
-                    <span style={{ color: '#c9d8cc', fontSize: 12, flex: 1 }}>{log.message}</span>
+                    <span className="layout-146">{log.message}</span>
                   </div>
                 ))}
                 {!filteredLogs.length && (
-                  <div style={{ padding: 30, textAlign: 'center', color: '#778a7e', fontSize: 12 }}>
+                  <div className="layout-147">
                     No execution log entries match the current filters.
                   </div>
                 )}
-                <div style={{ padding: '6px 8px', color: '#88a38f', fontSize: 12 }}>
+                <div className="layout-148">
                   <span className="cursor">▍</span>
                 </div>
               </div>
@@ -1567,18 +1531,18 @@ export default function App() {
               TAB: SETTINGS (UNIFIED CONFIGURATION)
              ════════════════════════════════════════════════════════════════ */}
           {tab === 'Settings' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="layout-149">
               {/* Settings Subnav Tabs */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
+              <div className="layout-150">
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 13, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <h3 className="layout-151">
                     <Icon name="settings" size={15}/> System Configuration & Clearance Policies
                   </h3>
-                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 12 }}>
+                  <p className="layout-152">
                     Manage zero-trust verification rules, AI inference models, and webhook endpoints.
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="layout-153">
                   <button
                     className={`btn-secondary btn-sm ${settingsSubTab === 'rules' ? 'chip-green' : ''}`}
                     onClick={() => setSettingsSubTab('rules')}
@@ -1602,10 +1566,10 @@ export default function App() {
 
               {/* ── SubTab 1: Verification Rules ── */}
               {settingsSubTab === 'rules' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
-                    <span style={{ fontSize: 12, color: '#97e8b0' }}>Zero-Trust Cryptographic & AST Clearance Policies</span>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div className="layout-154">
+                  <div className="layout-155">
+                    <span className="layout-156">Zero-Trust Cryptographic & AST Clearance Policies</span>
+                    <div className="layout-157">
                       <button className="btn-secondary btn-sm" onClick={() => {
                         setConfig({
                           ...config,
@@ -1631,13 +1595,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
-                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CONTRIBUTOR REPUTATION GATE</div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                          <label style={{ margin: 0 }}>Minimum Fast-Track Trust Score</label>
-                          <span className="chip chip-green" style={{ fontSize: 12 }}>{config.verification_rules.min_trust_score} / 100</span>
+                  <div className="layout-158">
+                    <div className="layout-159">
+                      <div className="layout-160">CONTRIBUTOR REPUTATION GATE</div>
+                      <div className="form-field layout-161" >
+                        <div className="layout-162">
+                          <label className="layout-163">Minimum Fast-Track Trust Score</label>
+                          <span className="chip chip-green layout-164" >{config.verification_rules.min_trust_score} / 100</span>
                         </div>
                         <input
                           type="range"
@@ -1650,10 +1614,10 @@ export default function App() {
                           })}
                         />
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+                      <div className="layout-165">
                         <div>
-                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Auto-Quarantine First-Time & Bot Accounts</strong>
-                          <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
+                          <strong className="layout-166">Auto-Quarantine First-Time & Bot Accounts</strong>
+                          <div className="layout-167">
                             Zero-trust hold on unverified personas until maintainer review.
                           </div>
                         </div>
@@ -1671,12 +1635,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CODE AUDIT & SLOP DEFENSE</div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                          <label style={{ margin: 0 }}>AST Blast Radius Threshold</label>
-                          <span className="chip chip-blue" style={{ fontSize: 12 }}>&le; &Delta;{config.verification_rules.blast_radius_threshold} statements</span>
+                    <div className="layout-168">
+                      <div className="layout-169">CODE AUDIT & SLOP DEFENSE</div>
+                      <div className="form-field layout-170" >
+                        <div className="layout-171">
+                          <label className="layout-172">AST Blast Radius Threshold</label>
+                          <span className="chip chip-blue layout-173" >&le; &Delta;{config.verification_rules.blast_radius_threshold} statements</span>
                         </div>
                         <input
                           type="number"
@@ -1687,10 +1651,10 @@ export default function App() {
                           })}
                         />
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+                      <div className="layout-174">
                         <div>
-                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Strict PyPI Slopsquatting Protection</strong>
-                          <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
+                          <strong className="layout-175">Strict PyPI Slopsquatting Protection</strong>
+                          <div className="layout-176">
                             Rejects unindexed packages & hallucinated AI dependencies.
                           </div>
                         </div>
@@ -1713,10 +1677,10 @@ export default function App() {
 
               {/* ── SubTab 2: AI Model & Inference ── */}
               {settingsSubTab === 'models' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
-                    <span style={{ fontSize: 12, color: '#97e8b0' }}>LLM Inference Engine & Open-Weight Reasoning Configuration</span>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div className="layout-177">
+                  <div className="layout-178">
+                    <span className="layout-179">LLM Inference Engine & Open-Weight Reasoning Configuration</span>
+                    <div className="layout-180">
                       <button className="btn-secondary btn-sm" disabled={llmTesting} onClick={handleTestLLM}>
                         <Icon name="activity" size={11}/> {llmTesting ? 'Pinging LLM…' : 'Test LLM Connection'}
                       </button>
@@ -1730,16 +1694,16 @@ export default function App() {
                   </div>
 
                   {llmTestStatus && (
-                    <div className="chip chip-green" style={{ padding: '4px 10px', width: 'fit-content' }}>
+                    <div className="chip chip-green layout-181" >
                       ✓ {llmTestStatus}
                     </div>
                   )}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
-                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>ACTIVE INFERENCE BACKEND</div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <label style={{ marginBottom: 3 }}>Primary Code Model</label>
+                  <div className="layout-182">
+                    <div className="layout-183">
+                      <div className="layout-184">ACTIVE INFERENCE BACKEND</div>
+                      <div className="form-field layout-185" >
+                        <label className="layout-186">Primary Code Model</label>
                         <select
                           value={config.model_config.model_name}
                           onChange={e => setConfig({
@@ -1754,8 +1718,8 @@ export default function App() {
                           <option value="deepseek-r1-distill-llama-70b">DeepSeek R1 Distill Llama 70B (Groq)</option>
                         </select>
                       </div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <label style={{ marginBottom: 3 }}>Inference Endpoint URL</label>
+                      <div className="form-field layout-187" >
+                        <label className="layout-188">Inference Endpoint URL</label>
                         <input
                           value={config.model_config.inference_endpoint}
                           onChange={e => setConfig({
@@ -1764,8 +1728,8 @@ export default function App() {
                           })}
                         />
                       </div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <label style={{ marginBottom: 3 }}>API Key / Bearer Token</label>
+                      <div className="form-field layout-189" >
+                        <label className="layout-190">API Key / Bearer Token</label>
                         <input
                           type="password"
                           value={config.model_config.api_key}
@@ -1778,12 +1742,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>REASONING PARAMETERS</div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                          <label style={{ margin: 0 }}>Sampling Temperature</label>
-                          <span className="chip chip-amber" style={{ fontSize: 12 }}>{config.model_config.temperature}</span>
+                    <div className="layout-191">
+                      <div className="layout-192">REASONING PARAMETERS</div>
+                      <div className="form-field layout-193" >
+                        <div className="layout-194">
+                          <label className="layout-195">Sampling Temperature</label>
+                          <span className="chip chip-amber layout-196" >{config.model_config.temperature}</span>
                         </div>
                         <input
                           type="range"
@@ -1797,8 +1761,8 @@ export default function App() {
                           })}
                         />
                       </div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <label style={{ marginBottom: 3 }}>Context Window Capacity</label>
+                      <div className="form-field layout-197" >
+                        <label className="layout-198">Context Window Capacity</label>
                         <select
                           value={config.model_config.context_window}
                           onChange={e => setConfig({
@@ -1818,10 +1782,10 @@ export default function App() {
 
               {/* ── SubTab 3: Repository, Webhook & Governance ── */}
               {settingsSubTab === 'repo' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
-                    <span style={{ fontSize: 12, color: '#97e8b0' }}>Webhook Endpoint Security & Sandbox Execution Limits</span>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div className="layout-199">
+                  <div className="layout-200">
+                    <span className="layout-201">Webhook Endpoint Security & Sandbox Execution Limits</span>
+                    <div className="layout-202">
                       <button className="btn-secondary btn-sm" onClick={() => {
                         const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
                         const url = URL.createObjectURL(blob)
@@ -1842,22 +1806,22 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
-                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>GITHUB WEBHOOK RECEIVER</div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <label style={{ marginBottom: 3 }}>Target Webhook URL</label>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <input readOnly value={config.repo_settings.webhook_url} style={{ flex: 1 }}/>
+                  <div className="layout-203">
+                    <div className="layout-204">
+                      <div className="layout-205">GITHUB WEBHOOK RECEIVER</div>
+                      <div className="form-field layout-206" >
+                        <label className="layout-207">Target Webhook URL</label>
+                        <div className="layout-208">
+                          <input readOnly value={config.repo_settings.webhook_url} className="layout-209"/>
                           <button className="btn-secondary btn-sm" onClick={() => { navigator.clipboard?.writeText(config.repo_settings.webhook_url); setNotice('Webhook URL copied!') }}>
                             <Icon name="copy" size={11}/>
                           </button>
                           <button className="btn-primary btn-sm" onClick={handlePingWebhook}>Ping</button>
                         </div>
                       </div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <label style={{ marginBottom: 3 }}>Webhook Secret Token</label>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                      <div className="form-field layout-210" >
+                        <label className="layout-211">Webhook Secret Token</label>
+                        <div className="layout-212">
                           <input
                             value={config.repo_settings.webhook_secret}
                             placeholder="whsec_••••••••"
@@ -1865,7 +1829,7 @@ export default function App() {
                               ...config,
                               repo_settings: { ...config.repo_settings, webhook_secret: e.target.value }
                             })}
-                            style={{ flex: 1 }}
+                            className="layout-213"
                           />
                           <button className="btn-secondary btn-sm" onClick={async () => {
                             try {
@@ -1885,12 +1849,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>EXECUTION & MERGE GATE</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
+                    <div className="layout-214">
+                      <div className="layout-215">EXECUTION & MERGE GATE</div>
+                      <div className="layout-216">
                         <div>
-                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Auto-Merge on Full Verification Pass</strong>
-                          <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
+                          <strong className="layout-217">Auto-Merge on Full Verification Pass</strong>
+                          <div className="layout-218">
                             Merges PRs passing RED&rarr;GREEN proofs and surviving fuzzing.
                           </div>
                         </div>
@@ -1906,10 +1870,10 @@ export default function App() {
                           <span className="slider"/>
                         </label>
                       </div>
-                      <div className="form-field" style={{ margin: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                          <label style={{ margin: 0 }}>Sandbox Execution Timeout</label>
-                          <span className="chip chip-blue" style={{ fontSize: 12 }}>{config.repo_settings.sandbox_timeout_sec} seconds</span>
+                      <div className="form-field layout-219" >
+                        <div className="layout-220">
+                          <label className="layout-221">Sandbox Execution Timeout</label>
+                          <span className="chip chip-blue layout-222" >{config.repo_settings.sandbox_timeout_sec} seconds</span>
                         </div>
                         <input
                           type="range"
@@ -1925,12 +1889,12 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div style={{ padding: '8px 14px', background: '#1c1414', border: '1px solid #4a2323', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="layout-223">
+                    <div className="layout-224">
                       <Icon name="alert" size={14}/>
                       <div>
-                        <strong style={{ fontSize: 12, color: '#ff9a92' }}>Danger Zone · Purge Session & Simulation Data</strong>
-                        <div style={{ fontSize: 12, color: '#c99692' }}>Permanently resets PR queue, bug proofs, and simulation data to zero state.</div>
+                        <strong className="layout-225">Danger Zone · Purge Session & Simulation Data</strong>
+                        <div className="layout-226">Permanently resets PR queue, bug proofs, and simulation data to zero state.</div>
                       </div>
                     </div>
                     <button className="btn-danger btn-sm" onClick={handleResetAllData}>
@@ -1966,7 +1930,7 @@ export default function App() {
 
       {/* ── Toast Notification ── */}
       {notice && (
-        <div className="toast" role="status">
+        <div className="toast" role="status" aria-live="polite">
           <Icon name="check" size={16}/>
           {notice}
           <button onClick={() => setNotice('')} aria-label="Dismiss"><Icon name="close" size={14}/></button>
@@ -2005,27 +1969,27 @@ export default function App() {
          ════════════════════════════════════════════════════════════════ */}
       {githubModalOpen && (
         <div className="modal-overlay" onClick={() => setGithubModalOpen(false)}>
-          <div className="modal-content" style={{ maxWidth: 740 }} onClick={e => e.stopPropagation()}>
+          <div className="modal-content layout-227"  onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3><Icon name="github" size={18}/> GitHub Authorization & Connected Repositories</h3>
               <button className="icon-button" onClick={() => setGithubModalOpen(false)}><Icon name="close" size={16}/></button>
             </div>
             <div className="modal-body">
               {/* Account Status Card */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, background: '#17241d', border: '1px solid #364d3c', borderRadius: 6, marginBottom: 18 }}>
-                <span className="avatar me" style={{ width: 44, height: 44, fontSize: 14 }}>
+              <div className="layout-228">
+                <span className="avatar me layout-229" >
                   {initials(githubUser.username)}
                 </span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <strong style={{ fontSize: 14, color: '#e4e7e3' }}>
+                <div className="layout-230">
+                  <div className="layout-231">
+                    <strong className="layout-232">
                       {githubUser.authenticated ? (githubUser.name || githubUser.username) : 'Not Authorized'}
                     </strong>
                     <span className={`chip ${githubUser.authenticated ? 'chip-green' : 'chip-amber'}`}>
                       {githubUser.authenticated ? 'AUTHORIZED' : 'DISCONNECTED'}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: '#8fa092', marginTop: 2 }}>
+                  <div className="layout-233">
                     {githubUser.authenticated ? (
                       `@${githubUser.username} · ${repos.length} Repositories Connected`
                     ) : (
@@ -2036,9 +2000,9 @@ export default function App() {
               </div>
 
               {/* Authorize Token / Handle Input */}
-              <div style={{ background: '#121c16', border: '1px solid var(--line)', padding: 16, borderRadius: 6, marginBottom: 18 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-field" style={{ marginBottom: 0 }}>
+              <div className="layout-234">
+                <div className="layout-235">
+                  <div className="form-field layout-236" >
                     <label>GitHub Username</label>
                     <input
                       value={githubUsernameInput}
@@ -2046,7 +2010,7 @@ export default function App() {
                       placeholder="e.g. asfandkhan8585-cpu or your-handle"
                     />
                   </div>
-                  <div className="form-field" style={{ marginBottom: 0 }}>
+                  <div className="form-field layout-237" >
                     <label>Personal Access Token (PAT) [Required to approve & merge PRs on GitHub]</label>
                     <input
                       type="password"
@@ -2056,8 +2020,8 @@ export default function App() {
                     />
                   </div>
                 </div>
-                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: '#7a8e80' }}>
+                <div className="layout-238">
+                  <span className="layout-239">
                     Authorizing loads your authentic repositories from GitHub.
                   </span>
                   <button className="btn-primary btn-sm" onClick={handleAuthorizeGitHub}>
@@ -2067,23 +2031,23 @@ export default function App() {
               </div>
 
               {/* Add Custom Repository Section */}
-              <div style={{ background: '#121c16', border: '1px solid var(--line)', padding: 14, borderRadius: 6, marginBottom: 18 }}>
-                <strong style={{ fontSize: 12, color: '#a5bda7', display: 'block', marginBottom: 8 }}>+ Connect New Custom Repository</strong>
-                <form onSubmit={handleAddCustomRepo} style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 1fr auto', gap: 8, alignItems: 'center' }}>
+              <div className="layout-240">
+                <strong className="layout-241">+ Connect New Custom Repository</strong>
+                <form onSubmit={handleAddCustomRepo} className="layout-242">
                   <input
-                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 12 }}
+                    className="layout-243"
                     placeholder="Repo name (e.g. backend-api)"
                     value={newRepoName}
                     onChange={e => setNewRepoName(e.target.value)}
                   />
                   <input
-                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 12 }}
+                    className="layout-244"
                     placeholder="Description (optional)"
                     value={newRepoDesc}
                     onChange={e => setNewRepoDesc(e.target.value)}
                   />
                   <select
-                    style={{ padding: '6px 8px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 12 }}
+                    className="layout-245"
                     value={newRepoLang}
                     onChange={e => setNewRepoLang(e.target.value)}
                   >
@@ -2098,22 +2062,22 @@ export default function App() {
 
               {/* Connected Repositories Grid */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Connected Repositories ({repos.length})</strong>
+                <div className="layout-246">
+                  <strong className="layout-247">Connected Repositories ({repos.length})</strong>
                   <button className="btn-secondary btn-sm" onClick={handleSyncRepos} disabled={isSyncing}>
                     <Icon name="sync" size={12} className={isSyncing ? "spin-anim" : ""} />
                     <span>{isSyncing ? "Refreshing…" : "Refresh Repos"}</span>
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
+                <div className="layout-248">
                   {repos.map(r => (
                     <div
                       key={r.id}
                       style={{
                         padding: '12px 14px',
-                        background: r.full_name === activeRepo ? '#1f3427' : '#141d18',
-                        border: `1px solid ${r.full_name === activeRepo ? '#4b7557' : '#2b3b30'}`,
+                        background: r.full_name === activeRepo ? 'var(--ui-1f3427)' : 'var(--ui-141d18)',
+                        border: `1px solid ${r.full_name === activeRepo ? 'var(--ui-4b7557)' : 'var(--ui-2b3b30)'}`,
                         borderRadius: 6,
                         display: 'flex',
                         alignItems: 'center',
@@ -2121,16 +2085,16 @@ export default function App() {
                         gap: 12,
                       }}
                     >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>{r.full_name}</strong>
+                      <div className="layout-249">
+                        <div className="layout-250">
+                          <strong className="layout-251">{r.full_name}</strong>
                           {r.is_private && <span className="chip chip-amber">PRIVATE</span>}
                           {r.full_name === activeRepo && <span className="chip chip-green">ACTIVE</span>}
                         </div>
-                        <div style={{ fontSize: 12, color: '#8fa092', marginTop: 3 }}>
+                        <div className="layout-252">
                           {r.description}
                         </div>
-                        <div style={{ fontSize: 12, color: '#6d8173', marginTop: 4, display: 'flex', gap: 12 }}>
+                        <div className="layout-253">
                           <span>★ {r.stars}</span>
                           <span>Forks: {r.forks}</span>
                           <span>Open PRs: {r.open_prs}</span>
@@ -2139,7 +2103,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div className="layout-254">
                         <button
                           className="btn-secondary btn-sm"
                           title="Simulate an incoming PR on this repository"
@@ -2164,7 +2128,7 @@ export default function App() {
                     </div>
                   ))}
                   {repos.length === 0 && (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#778a7d', fontSize: 12 }}>
+                    <div className="layout-255">
                       No repositories connected yet. Enter your GitHub username above or use "+ Connect New Custom Repository".
                     </div>
                   )}
@@ -2208,7 +2172,7 @@ export default function App() {
                     required
                   />
                 </div>
-                <div style={{ padding: 12, background: '#18241d', border: '1px solid #334737', borderRadius: 4, fontSize: 12, color: '#9bb0a0' }}>
+                <div className="layout-256">
                   <strong>Autonomous Pipeline:</strong> Llama-3.3-70B on Groq LPU analyzes codebase AST context, generates a standalone <code>test_repro_{newIssueNumber}.py</code>, and executes it in an ephemeral sandbox to verify the test is initially RED.
                 </div>
               </div>
@@ -2226,13 +2190,13 @@ export default function App() {
          ════════════════════════════════════════════════════════════════ */}
       {codeDrawer?.open && (
         <div className="modal-overlay" onClick={() => setCodeDrawer(null)}>
-          <div className="modal-content" style={{ maxWidth: 760 }} onClick={e => e.stopPropagation()}>
+          <div className="modal-content layout-257"  onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3><Icon name="terminal" size={18}/> {codeDrawer.file} (Issue #{codeDrawer.issue})</h3>
               <button className="icon-button" onClick={() => setCodeDrawer(null)}><Icon name="close" size={16}/></button>
             </div>
             <div className="modal-body">
-              <pre style={{ margin: 0, padding: 14, background: '#090e0c', border: '1px solid #27382d', borderRadius: 6, font: "13px/1.8 'IBM Plex Mono', monospace", color: '#8de8a4', overflowX: 'auto' }}>
+              <pre className="layout-258">
                 {codeDrawer.code}
               </pre>
             </div>
@@ -2253,24 +2217,24 @@ export default function App() {
          ════════════════════════════════════════════════════════════════ */}
       {notificationsOpen && (
         <div className="modal-overlay" onClick={() => setNotificationsOpen(false)}>
-          <div className="modal-content" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+          <div className="modal-content layout-259"  onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3><Icon name="bell" size={16}/> System Notifications</h3>
               <button className="icon-button" onClick={() => setNotificationsOpen(false)}><Icon name="close" size={14}/></button>
             </div>
-            <div className="modal-body" style={{ maxHeight: 320 }}>
+            <div className="modal-body layout-260" >
               {events.length > 0 ? (
                 events.slice(0, 6).map(evt => (
-                  <div key={evt.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8fa092', fontSize: 12 }}>
+                  <div key={evt.id} className="layout-261">
+                    <div className="layout-262">
                       <span>{evt.stage}</span>
                       <span>{timeAgo(evt.timestamp)}</span>
                     </div>
-                    <div style={{ marginTop: 3, color: '#e4e7e3' }}>{evt.message}</div>
+                    <div className="layout-263">{evt.message}</div>
                   </div>
                 ))
               ) : (
-                <div style={{ padding: 20, textAlign: 'center', color: '#7a8e80', fontSize: 12 }}>
+                <div className="layout-264">
                   No notifications yet.
                 </div>
               )}
@@ -2316,11 +2280,11 @@ function Row({ row: r, expanded, toggle, timeAgo, mapStatus, badgeClass, scoreCl
         </td>
         <td>
           {r.blast_radius ? (
-            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: (r.blast_radius.statement_delta > 50) ? '#ff7b72' : '#56d364' }}>
+            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: (r.blast_radius.statement_delta > 50) ? 'var(--ui-ff7b72)' : 'var(--ui-56d364)' }}>
               Δ{r.blast_radius.statement_delta} {r.blast_radius.scope_creep_detected && '⚠'}
             </span>
           ) : (
-            <span style={{ fontSize: 12, color: '#7a8e80' }}>-</span>
+            <span className="layout-265">-</span>
           )}
         </td>
         <td>
