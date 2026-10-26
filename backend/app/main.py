@@ -356,33 +356,54 @@ def select_github_repo(req: RepoSelectRequest):
 def sync_github_repos():
     """Forces synchronization with GitHub API."""
     eff_token = get_effective_github_token()
+    username = _github_user.get("username", "").strip() or "asfandkhan8585-cpu"
     headers = {"User-Agent": "GhostRepro-Gatekeeper", "Accept": "application/vnd.github.v3+json"}
     if eff_token:
         headers["Authorization"] = f"token {eff_token}"
         
     updated = 0
-    for repo in _github_repos:
-        fn = repo.get("full_name")
-        if not fn or "/" not in fn:
-            continue
-        try:
-            resp = requests.get(f"https://api.github.com/repos/{fn}", headers=headers, timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                repo["stars"] = data.get("stargazers_count", repo.get("stars", 0))
-                repo["forks"] = data.get("forks_count", repo.get("forks", 0))
-                repo["open_prs"] = data.get("open_issues_count", repo.get("open_prs", 0))
-                save_repository(repo)
-                updated += 1
-        except Exception:
-            pass
+    try:
+        resp = requests.get(f"https://api.github.com/users/{username}/repos?per_page=30&sort=updated", headers=headers, timeout=5)
+        if resp.status_code == 200:
+            repos_data = resp.json()
+            if isinstance(repos_data, list):
+                existing_map = {r["full_name"]: r for r in _github_repos}
+                for r in repos_data:
+                    fn = r.get("full_name") or f"{username}/{r.get('name')}"
+                    repo_entry = existing_map.get(fn)
+                    if not repo_entry:
+                        repo_entry = {
+                            "id": f"repo-{r.get('id', uuid.uuid4().hex[:6])}",
+                            "full_name": fn,
+                            "name": r.get("name", fn),
+                            "description": r.get("description") or "Repository monitored by GhostRepro",
+                            "is_active": (fn == _active_repo),
+                            "is_private": bool(r.get("private")),
+                            "stars": r.get("stargazers_count", 0),
+                            "forks": r.get("forks_count", 0),
+                            "open_prs": r.get("open_issues_count", 0),
+                            "quarantined_prs": 0,
+                            "repro_tests": 0,
+                            "language": r.get("language") or "Python",
+                            "default_branch": r.get("default_branch") or "main",
+                        }
+                        _github_repos.append(repo_entry)
+                    else:
+                        repo_entry["stars"] = r.get("stargazers_count", repo_entry.get("stars", 0))
+                        repo_entry["forks"] = r.get("forks_count", repo_entry.get("forks", 0))
+                        repo_entry["open_prs"] = r.get("open_issues_count", repo_entry.get("open_prs", 0))
+                        repo_entry["language"] = r.get("language") or repo_entry.get("language", "Python")
+                    save_repository(repo_entry)
+                    updated += 1
+    except Exception:
+        pass
 
     log_item = {
         "id": f"log-{uuid.uuid4().hex[:6]}",
         "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "stage": "CLEARANCE",
         "level": "INFO",
-        "message": f"Refreshed {updated}/{len(_github_repos)} repositories from GitHub API.",
+        "message": f"Synchronized {updated} repositories from GitHub API for @{username}.",
     }
     _execution_logs.append(log_item)
     save_log(log_item)

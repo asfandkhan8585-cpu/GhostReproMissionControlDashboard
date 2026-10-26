@@ -34,7 +34,7 @@ def req(path: str, method: str = "GET", data: dict = None, expect_error: bool = 
     body = json.dumps(data).encode("utf-8") if data is not None else None
     request = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=15) as res:
+        with urllib.request.urlopen(request, timeout=30) as res:
             return json.loads(res.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if expect_error:
