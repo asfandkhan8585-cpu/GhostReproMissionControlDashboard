@@ -74,7 +74,7 @@ cd backend
 pip install -r requirements.txt
 
 # Configure your Groq Open-Source LLM API key in .env:
-# GROQ_API_KEY=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
+# GROQ_API_KEY=gsk_your_groq_api_key_here
 # GROQ_MODEL=llama-3.3-70b-versatile
 # GROQ_BASE_URL=https://api.groq.com/openai/v1
 

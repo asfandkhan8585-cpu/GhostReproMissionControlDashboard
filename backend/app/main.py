@@ -12,20 +12,28 @@ from typing import Optional, Any
 import os
 import time
 import uuid
+import hmac
+import hashlib
+import json
+from pathlib import Path
 from datetime import datetime, timezone
 import requests
 from dotenv import load_dotenv
 
-from app.security import check_user_clearance, scan_pypi_dependencies
+from app.security import check_user_clearance, scan_pypi_dependencies, extract_package_name
 from app.ast_analyzer import calculate_ast_blast_radius
 from app.sandbox import run_pytest_sandbox
 from app.llm_agent import test_groq_connection, synthesize_pytest_reproduction, run_adversarial_fuzzing_evaluation
 from app.database import (
     save_user, get_latest_user,
     save_repository, get_all_repositories, set_active_repository,
+    save_pull_request, get_all_pull_requests,
     save_bug_repro, get_all_bug_repros,
+    save_slop_flag, get_all_slop_flags, delete_slop_flag,
+    add_to_whitelist, get_whitelist, remove_from_whitelist,
+    save_pipeline_event, get_pipeline_events,
     save_log, get_recent_logs,
-    save_config, get_config
+    save_config, get_config, get_full_config
 )
 
 load_dotenv()
@@ -103,35 +111,40 @@ _config = {
         "strict_mode": True,
     },
     "model_config": {
-        "model_name": "qwen/qwen3.8-27b (Groq LPU)",
+        "model_name": "llama-3.3-70b-versatile",
         "provider": "Groq Cloud / Open-Source LPU",
         "inference_endpoint": "https://api.groq.com/openai/v1",
         "temperature": 0.2,
         "context_window": "128k",
-        "api_key": "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"
+        "api_key": os.getenv("GROQ_API_KEY", "")
     },
     "repo_settings": {
         "webhook_url": "http://127.0.0.1:8000/webhook",
-        "webhook_secret": "whsec_ghostrepro_9f82c031d",
+        "webhook_secret": os.getenv("WEBHOOK_SECRET", "whsec_ghostrepro_rotated_secret"),
         "auto_merge_on_pass": False,
         "sandbox_timeout_sec": 30,
         "quarantine_unverified_bots": True,
     }
 }
 
-_pr_records: list[dict] = []
+# Reload configuration from SQLite if saved previously
+_db_config = get_full_config()
+if _db_config:
+    if "verification_rules" in _db_config:
+        _config["verification_rules"].update(_db_config["verification_rules"])
+    if "ai_model_config" in _db_config:
+        _config["model_config"].update(_db_config["ai_model_config"])
+    if "repo_settings" in _db_config:
+        _config["repo_settings"].update(_db_config["repo_settings"])
 
-_pipeline_events: list[dict] = []
-
-_slopsquat_flags: list[dict] = []
-
-_whitelisted_packages: list[str] = []
-
-_issue_repros: list[dict] = []
-
-_repro_code_samples: dict[int, str] = {}
-
-_execution_logs: list[dict] = []
+# Load all persistent entities from SQLite
+_pr_records: list[dict] = get_all_pull_requests()
+_pipeline_events: list[dict] = get_pipeline_events()
+_slopsquat_flags: list[dict] = get_all_slop_flags()
+_whitelisted_packages: list[str] = get_whitelist()
+_issue_repros: list[dict] = get_all_bug_repros()
+_repro_code_samples: dict[int, str] = {r["issue_number"]: r["code"] for r in _issue_repros if r.get("code")}
+_execution_logs: list[dict] = get_recent_logs()
 
 _github_token: str = os.getenv("GITHUB_TOKEN", "").strip()
 
@@ -235,30 +248,13 @@ def authorize_github(req: GitHubAuthorizeRequest):
     except Exception:
         pass
 
-    if not _github_repos:
-        _github_repos = [{
-            "id": f"repo-{int(time.time())}",
-            "full_name": f"{username}/my-project",
-            "name": "my-project",
-            "description": "Primary repository protected by GhostRepro Zero-Trust Gatekeeper",
-            "is_active": True,
-            "is_private": False,
-            "stars": 0,
-            "forks": 0,
-            "open_prs": 0,
-            "quarantined_prs": 0,
-            "repro_tests": 0,
-            "language": "Python",
-            "default_branch": "main",
-        }]
-
-    _active_repo = _github_repos[0]["full_name"]
+    if _github_repos:
+        _active_repo = _github_repos[0]["full_name"]
+        for r in _github_repos:
+            save_repository(r)
+        set_active_repository(_active_repo)
     
-    # Persist to SQLite Database
     save_user(_github_user, pat=req.token or "")
-    for r in _github_repos:
-        save_repository(r)
-    set_active_repository(_active_repo)
         
     _execution_logs.append({
         "id": f"log-{uuid.uuid4().hex[:6]}",
@@ -327,47 +323,78 @@ class RepoSelectRequest(BaseModel):
 @app.post("/api/github/repos/select")
 def select_github_repo(req: RepoSelectRequest):
     global _active_repo
-    selected = None
-    for r in _github_repos:
-        if r["id"] == req.repo_id or r["full_name"] == req.repo_id or r["name"] == req.repo_id:
-            r["is_active"] = True
-            selected = r
-            _active_repo = r["full_name"]
-        else:
-            r["is_active"] = False
-            
-    if not selected:
+    target = next((r for r in _github_repos if r.get("id") == req.repo_id or r.get("full_name") == req.repo_id or r.get("name") == req.repo_id), None)
+    if not target:
         raise HTTPException(status_code=404, detail="Repository not found")
         
+    for r in _github_repos:
+        r["is_active"] = (r == target)
+    _active_repo = target["full_name"]
     set_active_repository(_active_repo)
         
-    _execution_logs.append({
+    log_item = {
         "id": f"log-{uuid.uuid4().hex[:6]}",
         "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "stage": "CLEARANCE",
         "level": "INFO",
         "message": f"Active repository switched to: {_active_repo}",
-    })
-    return {"status": "success", "active_repo": _active_repo, "repo": selected}
+    }
+    _execution_logs.append(log_item)
+    save_log(log_item)
+    return {"status": "success", "active_repo": _active_repo, "repo": target}
 
 @app.post("/api/github/sync")
 def sync_github_repos():
-    """Forces synchronization with GitHub."""
-    _execution_logs.append({
+    """Forces synchronization with GitHub API."""
+    eff_token = get_effective_github_token()
+    headers = {"User-Agent": "GhostRepro-Gatekeeper", "Accept": "application/vnd.github.v3+json"}
+    if eff_token:
+        headers["Authorization"] = f"token {eff_token}"
+        
+    updated = 0
+    for repo in _github_repos:
+        fn = repo.get("full_name")
+        if not fn or "/" not in fn:
+            continue
+        try:
+            resp = requests.get(f"https://api.github.com/repos/{fn}", headers=headers, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                repo["stars"] = data.get("stargazers_count", repo.get("stars", 0))
+                repo["forks"] = data.get("forks_count", repo.get("forks", 0))
+                repo["open_prs"] = data.get("open_issues_count", repo.get("open_prs", 0))
+                save_repository(repo)
+                updated += 1
+        except Exception:
+            pass
+
+    log_item = {
         "id": f"log-{uuid.uuid4().hex[:6]}",
         "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "stage": "CLEARANCE",
         "level": "INFO",
-        "message": f"Refreshed {len(_github_repos)} repositories from GitHub API.",
-    })
-    return {"status": "synced", "count": len(_github_repos), "repositories": _github_repos}
+        "message": f"Refreshed {updated}/{len(_github_repos)} repositories from GitHub API.",
+    }
+    _execution_logs.append(log_item)
+    save_log(log_item)
+    return {"status": "synced", "count": updated, "repositories": _github_repos}
 
 
 # ─── Configuration Endpoints ────────────────────────────────────────────────
 
 @app.get("/api/config")
-def get_config():
-    return _config
+def get_config_endpoint():
+    """Returns application configuration with all secrets safely redacted."""
+    safe_config = {
+        "verification_rules": dict(_config.get("verification_rules", {})),
+        "model_config": dict(_config.get("model_config", {})),
+        "repo_settings": dict(_config.get("repo_settings", {})),
+    }
+    raw_api_key = safe_config["model_config"].get("api_key", "")
+    safe_config["model_config"]["api_key"] = "gsk_••••••••" if raw_api_key else ""
+    raw_secret = safe_config["repo_settings"].get("webhook_secret", "")
+    safe_config["repo_settings"]["webhook_secret"] = "whsec_••••••••" if raw_secret else ""
+    return safe_config
 
 class ConfigUpdateRequest(BaseModel):
     verification_rules: Optional[dict] = None
@@ -381,42 +408,55 @@ def update_config_endpoint(req: ConfigUpdateRequest):
         _config["verification_rules"].update(req.verification_rules)
         save_config("verification_rules", _config["verification_rules"])
     if req.ai_model_config:
-        _config["model_config"].update(req.ai_model_config)
+        # Ignore masked secret submissions
+        clean_model = dict(req.ai_model_config)
+        if clean_model.get("api_key", "").startswith("gsk_••"):
+            clean_model.pop("api_key", None)
+        _config["model_config"].update(clean_model)
         save_config("ai_model_config", _config["model_config"])
     if req.repo_settings:
-        _config["repo_settings"].update(req.repo_settings)
+        clean_repo = dict(req.repo_settings)
+        if clean_repo.get("webhook_secret", "").startswith("whsec_••"):
+            clean_repo.pop("webhook_secret", None)
+        _config["repo_settings"].update(clean_repo)
         save_config("repo_settings", _config["repo_settings"])
         
-    _execution_logs.append({
+    log_item = {
         "id": f"log-{uuid.uuid4().hex[:6]}",
         "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "stage": "CLEARANCE",
         "level": "INFO",
         "message": "Security policy & configuration updated by maintainer and persisted to SQLite.",
-    })
-    return {"status": "updated", "config": _config}
+    }
+    _execution_logs.append(log_item)
+    save_log(log_item)
+    return {"status": "updated", "config": get_config_endpoint()}
 
 @app.post("/api/config/test-llm")
 def test_llm_connection():
     """Validates connectivity to configured open-source Groq LLM with live LPU ping."""
     try:
         res = test_groq_connection(model=_config["model_config"].get("model_name", "llama-3.3-70b-versatile"))
-        _execution_logs.append({
+        log_item = {
             "id": f"log-{uuid.uuid4().hex[:6]}",
             "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
             "stage": "REPRO_TEST",
             "level": "PASS",
             "message": f"Groq LPU verified ({res['latency_ms']}ms latency) · {res['model']}",
-        })
+        }
+        _execution_logs.append(log_item)
+        save_log(log_item)
         return res
     except Exception as e:
-        _execution_logs.append({
+        log_item = {
             "id": f"log-{uuid.uuid4().hex[:6]}",
             "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
             "stage": "REPRO_TEST",
             "level": "ERROR",
             "message": f"Groq LPU connection FAILED: {str(e)}",
-        })
+        }
+        _execution_logs.append(log_item)
+        save_log(log_item)
         raise HTTPException(
             status_code=503,
             detail=f"LLM connection failed: {str(e)}. Check your API key and network connectivity."
@@ -424,32 +464,101 @@ def test_llm_connection():
 
 @app.post("/api/config/ping-webhook")
 def ping_webhook():
-    """Pings configured webhook to verify delivery."""
+    """Actually pings configured webhook to verify delivery with real HTTP request."""
+    webhook_url = _config.get("repo_settings", {}).get("webhook_url", "").strip()
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail="No webhook URL configured.")
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    ping_payload = json.dumps({
+        "zen": "GhostRepro webhook ping",
+        "hook_id": "ghostrepro-ping",
+        "timestamp": timestamp,
+    }).encode("utf-8")
+
+    headers = {
+        "User-Agent": "GhostRepro-Gatekeeper",
+        "X-GitHub-Event": "ping",
+        "Content-Type": "application/json",
+    }
+    secret = _config.get("repo_settings", {}).get("webhook_secret", "").strip()
+    if secret:
+        sig = hmac.new(secret.encode("utf-8"), ping_payload, hashlib.sha256).hexdigest()
+        headers["X-Hub-Signature-256"] = f"sha256={sig}"
+
+    try:
+        resp = requests.post(webhook_url, data=ping_payload, headers=headers, timeout=5)
+        is_success = (200 <= resp.status_code < 300)
+        http_code = resp.status_code
+        msg = f"Webhook ping to {webhook_url} responded with HTTP {http_code}."
+    except Exception as e:
+        is_success = False
+        http_code = 503
+        msg = f"Webhook ping connection failed: {str(e)}"
+
     evt = {
         "id": f"evt-{uuid.uuid4().hex[:6]}",
-        "pr_id": "system-test",
+        "pr_id": "system-ping",
         "stage": "WEBHOOK_PING",
-        "status": "passed",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "message": f"Webhook ping delivered to {_config['repo_settings']['webhook_url']} (HTTP 200).",
+        "status": "passed" if is_success else "failed",
+        "timestamp": timestamp,
+        "message": msg,
     }
     _pipeline_events.insert(0, evt)
-    return {"status": "pong", "event": evt}
+    save_pipeline_event(evt)
+
+    log_item = {
+        "id": f"log-{uuid.uuid4().hex[:6]}",
+        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+        "stage": "WEBHOOK",
+        "level": "PASS" if is_success else "WARN",
+        "message": msg,
+    }
+    _execution_logs.append(log_item)
+    save_log(log_item)
+
+    return {"status": "pong" if is_success else "error", "http_status": http_code, "event": evt, "message": msg}
 
 
 # ─── GitHub Webhook ──────────────────────────────────────────────────────────
 
 @app.post("/webhook")
 async def github_webhook(request: Request):
-    payload = await request.json()
+    body = await request.body()
+    
+    # Verify HMAC-SHA256 signature if webhook secret is configured
+    configured_secret = _config.get("repo_settings", {}).get("webhook_secret", "").strip()
+    sig_header = request.headers.get("X-Hub-Signature-256")
+    if configured_secret:
+        if not sig_header:
+            raise HTTPException(status_code=401, detail="Missing X-Hub-Signature-256 header")
+        expected_sig = "sha256=" + hmac.new(configured_secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig_header, expected_sig):
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    try:
+        payload = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON in webhook payload")
+
     event_type = request.headers.get("X-GitHub-Event")
+    if event_type == "ping":
+        return {"status": "pong", "message": "Ping received successfully"}
 
     if event_type == "pull_request":
         action = payload.get("action")
+        if not action:
+            raise HTTPException(status_code=400, detail="Missing 'action' in pull_request payload")
+            
         if action in ["opened", "synchronize"]:
-            pr = payload["pull_request"]
-            username = pr["user"]["login"]
-            author_association = pr["author_association"]
+            pr = payload.get("pull_request")
+            if not isinstance(pr, dict):
+                raise HTTPException(status_code=400, detail="Missing 'pull_request' object in webhook payload")
+            user_obj = pr.get("user")
+            if not isinstance(user_obj, dict) or not user_obj.get("login"):
+                raise HTTPException(status_code=400, detail="Missing 'user.login' in pull_request payload")
+            username = user_obj["login"]
+            author_association = pr.get("author_association", "NONE")
 
             clearance = check_user_clearance(username, author_association)
             if clearance["status"] == "QUARANTINED":
@@ -470,6 +579,7 @@ async def github_webhook(request: Request):
                     "pipeline_stage": "QUARANTINE",
                 }
                 _pr_records.insert(0, new_record)
+                save_pull_request(new_record)
                 return {"action_taken": "quarantined", "reason": clearance["message"]}
 
             return {"status": "success", "message": f"PR by @{username} passed clearance."}
@@ -637,23 +747,32 @@ def simulate_pr_endpoint(req: SimulatePRRequest):
                 for f in files:
                     fname = f.get("filename", "").lower()
                     patch = f.get("patch", "")
-                    if "requirement" in fname or fname.endswith(".txt") or fname.endswith(".toml"):
+                    # Only parse legitimate dependency configuration files
+                    is_dep_file = (
+                        "requirements" in fname
+                        or fname.endswith("pipfile")
+                        or fname.endswith("setup.py")
+                        or (fname.endswith("pyproject.toml") and "dependencies" in patch.lower())
+                    )
+                    if is_dep_file and patch:
                         for line in patch.splitlines():
                             if line.startswith("+") and not line.startswith("+++"):
-                                clean = line[1:].strip().split("==")[0].split(">=")[0].split("<=")[0].strip()
-                                if clean and not clean.startswith("#"):
+                                clean = extract_package_name(line)
+                                if clean:
                                     pr_dependencies.append(clean)
                                     scan_res = scan_single_package(PackageScanRequest(package=clean))
                                     if scan_res.get("is_threat"):
                                         status = "QUARANTINED"
                                         trust_score = 0
-                                        _execution_logs.append({
+                                        threat_log = {
                                             "id": f"log-{uuid.uuid4().hex[:6]}",
                                             "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                                             "stage": "SECURITY_SCAN",
                                             "level": "WARN",
                                             "message": f"🚨 Automated PyPI defense flagged hallucinated package '{clean}' in PR #{pr_num} by @{author}!",
-                                        })
+                                        }
+                                        _execution_logs.append(threat_log)
+                                        save_log(threat_log)
         except Exception:
             pass
 
@@ -675,23 +794,29 @@ def simulate_pr_endpoint(req: SimulatePRRequest):
             "pipeline_stage": "QUARANTINE" if status == "QUARANTINED" else "CLEARANCE_PASSED",
         }
         _pr_records.insert(0, new_pr)
+        save_pull_request(new_pr)
         ingested_prs.append(new_pr)
 
-        _pipeline_events.insert(0, {
+        evt = {
             "id": f"evt-{uuid.uuid4().hex[:6]}",
             "pr_id": new_pr["id"],
             "stage": "PR_OPENED",
             "status": "failed" if status == "QUARANTINED" else "passed",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "message": f"PR #{pr_num} '{gh_pr.get('title', '')}' by @{author} — {status}.",
-        })
-        _execution_logs.append({
+        }
+        _pipeline_events.insert(0, evt)
+        save_pipeline_event(evt)
+
+        log_item = {
             "id": f"log-{uuid.uuid4().hex[:6]}",
             "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
             "stage": "CLEARANCE",
             "level": "WARN" if status == "QUARANTINED" else "INFO",
             "message": f"Real PR #{pr_num} by @{author} ingested from GitHub. Status: {status}.",
-        })
+        }
+        _execution_logs.append(log_item)
+        save_log(log_item)
 
     if not ingested_prs:
         return {
@@ -750,24 +875,63 @@ def create_issue_repro(req: CreateIssueReproRequest):
 
 @app.post("/api/dashboard/issues/{issue_number}/run")
 def run_issue_repro(issue_number: int):
-    """Executes the bug reproduction test in sandbox."""
-    for issue in _issue_repros:
-        if issue["issue_number"] == issue_number:
-            # Flip or verify
-            current = issue["repro_status"]
-            new_status = "GREEN" if current == "RED" else "RED"
-            issue["repro_status"] = new_status
-            
-            _execution_logs.append({
-                "id": f"log-{uuid.uuid4().hex[:6]}",
-                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                "stage": "REPRO_TEST",
-                "level": "PASS" if new_status == "GREEN" else "WARN",
-                "message": f"Sandbox execution for #{issue_number}: status flipped to [{new_status}].",
-            })
-            return {"status": "success", "issue_number": issue_number, "repro_status": new_status}
-            
-    raise HTTPException(status_code=404, detail="Issue reproduction not found")
+    """Executes the bug reproduction test in sandbox with real pytest execution."""
+    target_issue = next((i for i in _issue_repros if i["issue_number"] == issue_number), None)
+    if not target_issue:
+        raise HTTPException(status_code=404, detail="Issue reproduction not found")
+
+    # Get test code from sample cache, database, or default failure proof
+    code = target_issue.get("code") or _repro_code_samples.get(issue_number)
+    if not code:
+        code = f'''import pytest
+
+def test_repro_issue_{issue_number}():
+    """Autonomous reproduction test for Issue #{issue_number}"""
+    assert False, "RED: Defect reproduced for #{issue_number}."
+'''
+
+    # Ensure tests directory exists inside sandbox boundary
+    test_dir = Path(__file__).resolve().parent.parent / "tests" / "repros"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    test_file_path = test_dir / f"test_repro_{issue_number}.py"
+    test_file_path.write_text(code, encoding="utf-8")
+
+    # Execute REAL sandbox run
+    res = run_pytest_sandbox(str(test_file_path))
+    new_status = "GREEN" if res["passed"] else "RED"
+    target_issue["repro_status"] = new_status
+    target_issue["test_file"] = f"test_repro_{issue_number}.py"
+    target_issue["code"] = code
+    save_bug_repro(target_issue)
+
+    log_item = {
+        "id": f"log-{uuid.uuid4().hex[:6]}",
+        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+        "stage": "REPRO_TEST",
+        "level": "PASS" if new_status == "GREEN" else "WARN",
+        "message": f"Real sandbox execution for #{issue_number}: pytest exit_code={res['exit_code']} -> [{new_status}].",
+    }
+    _execution_logs.append(log_item)
+    save_log(log_item)
+
+    evt = {
+        "id": f"evt-{uuid.uuid4().hex[:6]}",
+        "pr_id": f"issue-{issue_number}",
+        "stage": "REPRO_EXECUTION",
+        "status": "passed" if res["passed"] else "failed",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "message": f"Pytest executed on test_repro_{issue_number}.py. Status: {new_status} (exit code {res['exit_code']}).",
+    }
+    _pipeline_events.insert(0, evt)
+    save_pipeline_event(evt)
+
+    return {
+        "status": "success",
+        "issue_number": issue_number,
+        "repro_status": new_status,
+        "exit_code": res["exit_code"],
+        "output": res["output"]
+    }
 
 @app.get("/api/dashboard/issues/{issue_number}/code")
 def get_issue_repro_code(issue_number: int):
@@ -1026,7 +1190,11 @@ def trigger_full_test_suite(req: SandboxTriggerRequest):
     if test_path:
         test_result = run_pytest_sandbox(test_path)
     else:
-        test_result = {"passed": True, "exit_code": 0, "output": "1 passed in 0.04s"}
+        test_result = {
+            "passed": False,
+            "exit_code": 1,
+            "output": "Error: No candidate test file found on disk (demo_repo/test_checkout.py not found)."
+        }
 
     # Execute REAL Qwen adversarial fuzzing evaluation
     fuzzing_res = run_adversarial_fuzzing_evaluation(
@@ -1038,9 +1206,11 @@ def trigger_full_test_suite(req: SandboxTriggerRequest):
         {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "SANDBOX", "level": "INFO", "message": f"Ephemeral runner executing {test_path or 'regression test suite'}..."},
         {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "REPRO_TEST", "level": "PASS" if test_result["passed"] else "WARN", "message": f"Pytest exit code {test_result['exit_code']}: {test_result['output'].strip()[:100]}"},
         {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "FUZZING", "level": "INFO", "message": f"Evaluating 128 adversarial mutations with Qwen on Groq LPU..."},
-        {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "FUZZING", "level": "PASS", "message": f"128 mutations evaluated: {fuzzing_res.get('groq_analysis', '0 cheats detected')[:90]}"},
+        {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "FUZZING", "level": "PASS" if fuzzing_res.get("status") == "passed" else "WARN", "message": f"128 mutations evaluated: {fuzzing_res.get('groq_analysis', '0 cheats detected')[:90]}"},
         {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "MERGE_GATE", "level": "PASS" if test_result["passed"] else "WARN", "message": "Verification complete. Security checks validated."},
     ])
+    for l in _execution_logs[-5:]:
+        save_log(l)
     
     evt = {
         "id": f"evt-{uuid.uuid4().hex[:6]}",
@@ -1051,6 +1221,7 @@ def trigger_full_test_suite(req: SandboxTriggerRequest):
         "message": f"Real sandbox suite executed: exit_code={test_result['exit_code']}, 128 mutations evaluated by Qwen.",
     }
     _pipeline_events.insert(0, evt)
+    save_pipeline_event(evt)
     return {
         "status": "completed",
         "exit_code": test_result["exit_code"],
@@ -1101,12 +1272,8 @@ def execute_github_pr_incorporation(
 
     default_body = (
         review_body or 
-        "🛡️ **GhostRepro Zero-Trust Gatekeeper — Mathematically Verified & Approved**\n\n"
-        "- ✅ **AST Blast-Radius**: Pass (< 50 statement delta, 0 scope creep)\n"
-        "- ✅ **PyPI Slopsquatting**: Pass (0 hallucinated packages)\n"
-        "- ✅ **Pytest Sandbox**: Pass (RED ➔ GREEN failure proof verified)\n"
-        "- ✅ **Qwen Adversarial Fuzzing**: Pass (128 mutation tests survived, 0 cheats detected)\n\n"
-        "Maintainer approved and verified via GhostRepro Mission Control Dashboard."
+        f"🛡️ **GhostRepro Zero-Trust Gatekeeper**\n\n"
+        f"Pull request #{pr_number} approved and verified by maintainer via GhostRepro Mission Control Dashboard."
     )
 
     # 1. Submit GitHub PR Review: APPROVE
@@ -1185,40 +1352,54 @@ def authorize_quarantined_user(username: str, body: AuthorizeRequest = Authorize
     gh_action_result = None
     for pr in _pr_records:
         if pr["author"] == username and pr["status"] == "QUARANTINED":
-            pr["test_result"] = {"passed": True, "exit_code": 0, "output": "All sandbox tests passed."}
-            pr["status"] = "PASSED"
-            pr["pipeline_stage"] = "MERGED_ON_GITHUB" if body.merge_on_github else "COMPLETE"
-            pr["trust_score"] = 85
             found = True
-
             # ACTUALLY INCORPORATE INTO GITHUB VIA GITHUB REST API
             gh_action_result = execute_github_pr_incorporation(
                 repo=pr.get("repo", _active_repo),
                 pr_number=pr.get("number", 0),
                 action="approve_and_merge" if body.merge_on_github else "approve",
                 token=body.token,
-                review_body=f"🛡️ **GhostRepro Zero-Trust Gatekeeper**\n\nMaintainer released @{username} from quarantine.\n\n- ✅ AST Blast-Radius Passed\n- ✅ PyPI Slopsquatting Clean\n- ✅ Sandbox Test Passed\n- ✅ 128 Mutations Evaluated (0 cheats)\n\n{body.reason}"
+                review_body=f"🛡️ **GhostRepro Zero-Trust Gatekeeper**\n\nMaintainer released @{username} from quarantine.\n\nReason: {body.reason}"
             )
             pr["github_action_result"] = gh_action_result
-            if gh_action_result.get("success"):
-                pr["merged"] = True
 
-            _pipeline_events.insert(0, {
+            if body.merge_on_github:
+                if gh_action_result.get("success"):
+                    pr["status"] = "PASSED"
+                    pr["pipeline_stage"] = "MERGED_ON_GITHUB"
+                    pr["merged"] = True
+                    pr["trust_score"] = 85
+                else:
+                    pr["status"] = "FAILED"
+                    pr["pipeline_stage"] = "MERGE_FAILED"
+                    pr["merged"] = False
+            else:
+                pr["status"] = "PASSED"
+                pr["pipeline_stage"] = "AUTHORIZED"
+                pr["trust_score"] = 85
+
+            save_pull_request(pr)
+
+            evt = {
                 "id": f"evt-{uuid.uuid4().hex[:6]}",
                 "pr_id": pr["id"],
                 "stage": "MANUAL_AUTHORIZE",
-                "status": "passed",
+                "status": "passed" if gh_action_result.get("success") else "failed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "message": f"✅ @{username} authorized. GitHub result: {gh_action_result.get('message', 'Processed')}",
-            })
+                "message": f"Maintainer authorized @{username}. GitHub merge result: {gh_action_result.get('message', 'Processed')}",
+            }
+            _pipeline_events.insert(0, evt)
+            save_pipeline_event(evt)
             
-            _execution_logs.append({
+            log_item = {
                 "id": f"log-{uuid.uuid4().hex[:6]}",
                 "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                 "stage": "CLEARANCE",
-                "level": "PASS" if gh_action_result.get("success") else "INFO",
+                "level": "PASS" if gh_action_result.get("success") else "WARN",
                 "message": f"Maintainer released @{username} from quarantine. GitHub: {gh_action_result.get('message', 'Authorized')}",
-            })
+            }
+            _execution_logs.append(log_item)
+            save_log(log_item)
             break
 
     if not found:
@@ -1239,6 +1420,7 @@ def reject_quarantined_user(username: str, body: AuthorizeRequest = AuthorizeReq
             pr["status"] = "REJECTED"
             pr["pipeline_stage"] = "BLOCKED"
             found = True
+            save_pull_request(pr)
             
             # Close on GitHub if token available
             eff_token = get_effective_github_token(body.token)
@@ -1250,14 +1432,26 @@ def reject_quarantined_user(username: str, body: AuthorizeRequest = AuthorizeReq
                 except Exception:
                     pass
 
-            _pipeline_events.insert(0, {
+            evt = {
                 "id": f"evt-{uuid.uuid4().hex[:6]}",
                 "pr_id": pr["id"],
                 "stage": "REJECT",
                 "status": "failed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "message": f"❌ PR by @{username} rejected and closed on GitHub.",
-            })
+            }
+            _pipeline_events.insert(0, evt)
+            save_pipeline_event(evt)
+
+            log_item = {
+                "id": f"log-{uuid.uuid4().hex[:6]}",
+                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                "stage": "CLEARANCE",
+                "level": "WARN",
+                "message": f"PR by @{username} rejected by maintainer.",
+            }
+            _execution_logs.append(log_item)
+            save_log(log_item)
             break
             
     if not found:
@@ -1283,28 +1477,38 @@ def merge_github_pr_endpoint(req: PRMergeRequest):
     )
     for pr in _pr_records:
         if pr.get("number") == req.pr_number and (pr.get("repo") == repo or not pr.get("repo")):
-            pr["status"] = "PASSED"
-            pr["pipeline_stage"] = "MERGED_ON_GITHUB"
-            pr["merged"] = True
+            if gh_res.get("success"):
+                pr["status"] = "PASSED"
+                pr["pipeline_stage"] = "MERGED_ON_GITHUB"
+                pr["merged"] = True
+            else:
+                pr["status"] = "FAILED"
+                pr["pipeline_stage"] = "MERGE_FAILED"
+                pr["merged"] = False
             pr["github_action_result"] = gh_res
+            save_pull_request(pr)
             break
             
-    _pipeline_events.insert(0, {
+    evt = {
         "id": f"evt-{uuid.uuid4().hex[:6]}",
         "pr_id": f"pr-{req.pr_number}",
         "stage": "GITHUB_MERGE",
         "status": "passed" if gh_res.get("success") else "failed",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "message": gh_res.get("message", f"PR #{req.pr_number} processed on GitHub."),
-    })
+    }
+    _pipeline_events.insert(0, evt)
+    save_pipeline_event(evt)
     
-    _execution_logs.append({
+    log_item = {
         "id": f"log-{uuid.uuid4().hex[:6]}",
         "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "stage": "MERGE_GATE",
         "level": "PASS" if gh_res.get("success") else "WARN",
         "message": f"GitHub API: PR #{req.pr_number} in {repo}: {gh_res.get('message', '')}",
-    })
+    }
+    _execution_logs.append(log_item)
+    save_log(log_item)
 
     return gh_res
 
@@ -1334,5 +1538,8 @@ class SandboxRequest(BaseModel):
 
 @app.post("/api/sandbox/run")
 def run_sandbox(req: SandboxRequest):
-    """Execute pytest in a sandboxed subprocess."""
-    return run_pytest_sandbox(req.test_file_path)
+    """Execute pytest in a sandboxed subprocess with strict isolation."""
+    res = run_pytest_sandbox(req.test_file_path)
+    if "Security violation" in res.get("output", ""):
+        raise HTTPException(status_code=400, detail=res["output"])
+    return res
