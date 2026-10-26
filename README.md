@@ -307,9 +307,13 @@ As part of the **Hacktoberfest Hackathon NUST × NSTP Kiro Challenge Track**, **
 
 Developed with pride for the **Hacktoberfest Hackathon NUST × NSTP** by:
 
-- **Muhammad Asfand Khan** ([@asfandkhan8585-cpu](https://github.com/asfandkhan8585-cpu))
+- **Muhammad Asfand Khan** ([@asfandkhan8585-cpu]
+- asfandkhan8585@gmail.cok
+- (https://github.com/asfandkhan8585-cpu))
   - *Lead Architect & Full-Stack Developer: System Architecture, Backend Orchestrator (`FastAPI`), AST Blast-Radius Engine, PyPI Security Scanner, Groq LPU Integration, and Live Verification Suite (`test_live_system.py`).*
 - **Muhammad Talal Aqdas**
+- muhammad-talal-aqdas
+- mtalal.aqdas@gmail.com
   - *Core Contributor: Mission Control UI/UX Implementation (`React 19` + `Tailwind CSS v4`), Real-time Telemetry Visualization, Sandbox Runner Testing, and Hackathon Documentation & Research.*
 
 ---
