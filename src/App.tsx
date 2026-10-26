@@ -603,7 +603,7 @@ export default function App() {
           <button
             type="button"
             className="sync-btn"
-            style={{ padding: '3px 8px', fontSize: 10 }}
+            style={{ padding: '3px 8px', fontSize: 12 }}
             onClick={handleSyncRepos}
             disabled={isSyncing}
             title="Synchronize repository states and PRs from GitHub"
@@ -686,7 +686,7 @@ export default function App() {
             >
               <Icon name={icon}/>
               <span>{label}</span>
-              {label === 'Live Agent Studio' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#1f6feb', color: '#fff', borderRadius: 3, fontWeight: 700, marginLeft: 'auto' }}>LAB</span>}
+              {label === 'Live Agent Studio' && <span style={{ fontSize: 12, padding: '1px 5px', background: '#1f6feb', color: '#fff', borderRadius: 3, fontWeight: 700, marginLeft: 'auto' }}>LAB</span>}
               {label === 'Quarantine' && <b>{queue.length}</b>}
               {label === 'Pull requests' && <small>{prs.length}</small>}
             </button>
@@ -929,7 +929,7 @@ export default function App() {
                             </div>
                             <span className="external" style={{ cursor: 'pointer' }} onClick={() => setNotice(`Viewing PR #${pr.number} code changes`)}>↗</span>
                           </div>
-                          <div style={{ fontSize: 9.5, color: 'var(--muted)', margin: '4px 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {pr.title}
                           </div>
                           <div className="risk">
@@ -964,12 +964,12 @@ export default function App() {
                     <div className="table-scroll">
                       {events.length > 0 ? (
                         events.map(evt => (
-                          <div key={evt.id} style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--line)', alignItems: 'flex-start', fontSize: 10 }}>
+                          <div key={evt.id} style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--line)', alignItems: 'flex-start', fontSize: 12 }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 3, flexShrink: 0, background: evt.status === 'passed' ? 'var(--green)' : 'var(--red)' }}/>
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 8, letterSpacing: '0.6px', color: 'var(--muted)' }}>{evt.stage}</div>
+                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, letterSpacing: '0.6px', color: 'var(--muted)' }}>{evt.stage}</div>
                               <div style={{ color: '#c9d1d9', lineHeight: 1.3 }}>{evt.message}</div>
-                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 7.5, color: 'var(--muted)', marginTop: 2 }}>{timeAgo(evt.timestamp)}</div>
+                              <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{timeAgo(evt.timestamp)}</div>
                             </div>
                           </div>
                         ))
@@ -1069,7 +1069,7 @@ export default function App() {
                           </div>
                         </td>
                         <td>
-                          <code style={{ fontSize: 10, color: '#9bb0a0' }}>{r.repo.split('/')[1] || r.repo}</code>
+                          <code style={{ fontSize: 12, color: '#9bb0a0' }}>{r.repo.split('/')[1] || r.repo}</code>
                         </td>
                         <td><span className={`badge ${badgeClass(r.status)}`}><i/>{mapStatus(r.status)}</span></td>
                         <td>
@@ -1077,11 +1077,11 @@ export default function App() {
                         </td>
                         <td>
                           {r.blast_radius ? (
-                            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 10, color: r.blast_radius.statement_delta > 50 ? '#ff8a80' : '#88e49c' }}>
+                            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: r.blast_radius.statement_delta > 50 ? '#ff8a80' : '#88e49c' }}>
                               Δ{r.blast_radius.statement_delta} {r.blast_radius.scope_creep_detected ? '🚨' : '✓'}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--muted)', fontSize: 10 }}>Pending</span>
+                            <span style={{ color: 'var(--muted)', fontSize: 12 }}>Pending</span>
                           )}
                         </td>
                         <td>
@@ -1106,7 +1106,7 @@ export default function App() {
                           ) : r.status === 'PASSED' ? (
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                               {r.pipeline_stage === 'MERGED_ON_GITHUB' ? (
-                                <span className="chip chip-green" style={{ fontSize: 9 }}>✓ Merged on GitHub</span>
+                                <span className="chip chip-green" style={{ fontSize: 12 }}>✓ Merged on GitHub</span>
                               ) : (
                                 <button
                                   className="btn-primary btn-sm"
@@ -1123,7 +1123,7 @@ export default function App() {
                                 target="_blank"
                                 rel="noreferrer"
                                 className="btn-secondary btn-sm"
-                                style={{ padding: '2px 6px', fontSize: 9 }}
+                                style={{ padding: '2px 6px', fontSize: 12 }}
                                 title="Open Pull Request on GitHub"
                               >
                                 GitHub ↗
@@ -1131,7 +1131,7 @@ export default function App() {
                             </div>
                           ) : (
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              <span className="chip chip-red" style={{ fontSize: 9 }}>Blocked</span>
+                              <span className="chip chip-red" style={{ fontSize: 12 }}>Blocked</span>
                               <button className="btn-secondary btn-sm" onClick={() => setNotice(`Viewing audit logs for PR #${r.number}`)}>
                                 Audit Log
                               </button>
@@ -1146,7 +1146,7 @@ export default function App() {
                   <div style={{ padding: 40, textAlign: 'center' }}>
                     <Icon name="branch" size={32}/>
                     <h3 style={{ margin: '12px 0 4px', color: '#91b69c', fontSize: 15 }}>No Pull Requests Under Review</h3>
-                    <p style={{ color: '#778a7d', fontSize: 11, maxWidth: 440, margin: 'auto' }}>
+                    <p style={{ color: '#778a7d', fontSize: 12, maxWidth: 440, margin: 'auto' }}>
                       GhostRepro is actively monitoring <code>{activeRepo || 'your repository'}</code> for incoming PR webhook events. Click below to fetch real open PRs from GitHub.
                     </p>
                     <button className="btn-primary btn-sm" style={{ marginTop: 14 }} onClick={() => handleSimulateIncomingPR(activeRepo)}>
@@ -1168,7 +1168,7 @@ export default function App() {
                   <Icon name="shield" size={18}/>
                   <div>
                     <h3 style={{ margin: 0, fontSize: 12, color: '#f3c988' }}>Zero-Trust Quarantine Sandbox</h3>
-                    <p style={{ margin: '1px 0 0', color: '#a89477', fontSize: 9 }}>
+                    <p style={{ margin: '1px 0 0', color: '#a89477', fontSize: 12 }}>
                       Code from first-time contributors and unverified bots is held in quarantine until human clearance.
                     </p>
                   </div>
@@ -1192,17 +1192,17 @@ export default function App() {
                           <span className="avatar avatar-1">{initials(pr.author)}</span>
                           <div>
                             <strong style={{ fontSize: 12, color: '#e4e7e3' }}>{pr.author}</strong>
-                            <div style={{ fontSize: 9, color: '#8fa092' }}>PR #{pr.number} · {timeAgo(pr.created_at)}</div>
+                            <div style={{ fontSize: 12, color: '#8fa092' }}>PR #{pr.number} · {timeAgo(pr.created_at)}</div>
                           </div>
                         </div>
                         <span className="chip chip-red">HELD</span>
                       </div>
 
-                      <div style={{ marginTop: 8, fontSize: 11, fontWeight: 500, color: '#c9d8cc' }}>
+                      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 500, color: '#c9d8cc' }}>
                         {pr.title}
                       </div>
 
-                      <div style={{ marginTop: 8, padding: 8, background: '#16221a', borderRadius: 4, fontSize: 9, color: '#9bb0a0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                      <div style={{ marginTop: 8, padding: 8, background: '#16221a', borderRadius: 4, fontSize: 12, color: '#9bb0a0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                         <div><strong>Repo:</strong> {pr.repo}</div>
                         <div><strong>Tier:</strong> {pr.tier}</div>
                         <div><strong>Role:</strong> {pr.author_association || 'NONE'}</div>
@@ -1230,7 +1230,7 @@ export default function App() {
                   <div style={{ gridColumn: '1/-1', padding: 36, textAlign: 'center', background: '#131b17', border: '1px solid var(--line)', borderRadius: 6 }}>
                     <Icon name="check" size={26}/>
                     <h3 style={{ margin: '8px 0 3px', color: '#91b69c', fontSize: 13 }}>Quarantine Queue is Clear</h3>
-                    <p style={{ color: '#778a7d', fontSize: 10 }}>No pull requests are currently blocked or awaiting maintainer clearance.</p>
+                    <p style={{ color: '#778a7d', fontSize: 12 }}>No pull requests are currently blocked or awaiting maintainer clearance.</p>
                     <button className="btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={() => handleSimulateIncomingPR(activeRepo)}>
                       + Fetch PRs for Review
                     </button>
@@ -1252,7 +1252,7 @@ export default function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Icon name="package" size={16}/>
                   <strong style={{ fontSize: 12, color: '#e4e7e3' }}>PyPI Anti-Slopsquatting Defense</strong>
-                  <span style={{ fontSize: 9, color: '#7e9184' }}>· Real-time dependency threat intelligence</span>
+                  <span style={{ fontSize: 12, color: '#7e9184' }}>· Real-time dependency threat intelligence</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span className="chip chip-red">Blocked: {slopFlags.length}</span>
@@ -1260,7 +1260,7 @@ export default function App() {
                   <span className="chip chip-blue">PyPI JSON API: Online</span>
                   <button
                     className="btn-primary btn-sm"
-                    style={{ background: '#1b4d32', borderColor: '#2e7d52', cursor: 'pointer', padding: '3px 10px', fontSize: 10, display: 'flex', alignItems: 'center', gap: 5 }}
+                    style={{ background: '#1b4d32', borderColor: '#2e7d52', cursor: 'pointer', padding: '3px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
                     disabled={autoScanning}
                     onClick={handleAutoScanRepo}
                   >
@@ -1276,7 +1276,7 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Icon name="check" size={14} />
-                      <strong style={{ fontSize: 11, color: '#97e8b0' }}>
+                      <strong style={{ fontSize: 12, color: '#97e8b0' }}>
                         Automated PyPI Dependency Scan ({autoScanResults.length} packages discovered & verified)
                       </strong>
                     </div>
@@ -1294,22 +1294,22 @@ export default function App() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 8,
-                          fontSize: 10,
+                          fontSize: 12,
                         }}
                       >
                         <strong style={{ color: pkgRes.is_threat ? '#ff8c82' : '#d2ecd7', fontFamily: "'IBM Plex Mono', monospace" }}>
                           {pkgRes.package}
                         </strong>
-                        <span className={`chip ${pkgRes.is_threat ? 'chip-red' : 'chip-green'}`} style={{ fontSize: 8 }}>
+                        <span className={`chip ${pkgRes.is_threat ? 'chip-red' : 'chip-green'}`} style={{ fontSize: 12 }}>
                           {pkgRes.status}
                         </span>
                         {pkgRes.latest_version && (
-                          <span style={{ fontSize: 8, color: '#7a9682' }}>v{pkgRes.latest_version}</span>
+                          <span style={{ fontSize: 12, color: '#7a9682' }}>v{pkgRes.latest_version}</span>
                         )}
                         {pkgRes.is_threat && (
                           <button
                             className="btn-primary btn-sm"
-                            style={{ fontSize: 8, padding: '1px 5px' }}
+                            style={{ fontSize: 12, padding: '1px 5px' }}
                             onClick={() => handleWhitelist(pkgRes.package)}
                           >
                             Whitelist
@@ -1325,21 +1325,21 @@ export default function App() {
               <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: '12px 16px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                   <div>
-                    <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Manual Package Query (Optional)</h4>
-                    <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9 }}>Packages in PRs and workspace are scanned automatically. Use this for quick manual checks.</p>
+                    <h4 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Manual Package Query (Optional)</h4>
+                    <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 12 }}>Packages in PRs and workspace are scanned automatically. Use this for quick manual checks.</p>
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 8, color: '#6e8073' }}>Quick tests:</span>
-                    <button className="chip chip-red" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('reqeusts'); handleScanPackage('reqeusts') }}>reqeusts (Typo)</button>
-                    <button className="chip chip-amber" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('colorsys2'); handleScanPackage('colorsys2') }}>colorsys2 (Ghost)</button>
-                    <button className="chip chip-green" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('requests'); handleScanPackage('requests') }}>requests (Legit)</button>
-                    <button className="chip chip-blue" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 8 }} onClick={() => { setScanInput('fastapi'); handleScanPackage('fastapi') }}>fastapi (Legit)</button>
+                    <span style={{ fontSize: 12, color: '#6e8073' }}>Quick tests:</span>
+                    <button className="chip chip-red" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('reqeusts'); handleScanPackage('reqeusts') }}>reqeusts (Typo)</button>
+                    <button className="chip chip-amber" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('colorsys2'); handleScanPackage('colorsys2') }}>colorsys2 (Ghost)</button>
+                    <button className="chip chip-green" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('requests'); handleScanPackage('requests') }}>requests (Legit)</button>
+                    <button className="chip chip-blue" style={{ cursor: 'pointer', padding: '2px 7px', fontSize: 12 }} onClick={() => { setScanInput('fastapi'); handleScanPackage('fastapi') }}>fastapi (Legit)</button>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
-                    style={{ flex: 1, padding: '6px 10px', background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e4e7e3', fontSize: 10, fontFamily: "'IBM Plex Mono', monospace" }}
+                    style={{ flex: 1, padding: '6px 10px', background: '#101713', border: '1px solid #304234', borderRadius: 4, color: '#e4e7e3', fontSize: 12, fontFamily: "'IBM Plex Mono', monospace" }}
                     placeholder="Enter package name to test on PyPI (e.g. reqeusts, colorsys2, numpy)..."
                     value={scanInput}
                     onChange={e => setScanInput(e.target.value)}
@@ -1354,23 +1354,23 @@ export default function App() {
                 {scanResult && (
                   <div style={{ marginTop: 8, padding: 10, background: scanResult.is_threat ? '#251615' : '#14241b', border: `1px solid ${scanResult.is_threat ? '#5c2420' : '#274a34'}`, borderRadius: 5 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: 10, color: scanResult.is_threat ? '#ff9a92' : '#88e49c' }}>
+                      <strong style={{ fontSize: 12, color: scanResult.is_threat ? '#ff9a92' : '#88e49c' }}>
                         {scanResult.is_threat ? '🛑 Hallucinated / Squatted Threat Detected' : '✅ Verified PyPI Package'}
                       </strong>
                       <span className={`chip ${scanResult.is_threat ? 'chip-red' : 'chip-green'}`}>
                         {scanResult.status}
                       </span>
                     </div>
-                    <div style={{ fontSize: 9, color: '#c3d2c6', marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: '#c3d2c6', marginTop: 2 }}>
                       {scanResult.message}
                     </div>
                     {scanResult.latest_version && (
-                      <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                      <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
                         Latest Version: <code>v{scanResult.latest_version}</code> · Author: {scanResult.author || 'PyPI Community'}
                       </div>
                     )}
                     <div style={{ marginTop: 6 }}>
-                      <button className="btn-primary btn-sm" style={{ padding: '2px 8px', fontSize: 9 }} onClick={() => handleWhitelist(scanResult.package)}>
+                      <button className="btn-primary btn-sm" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => handleWhitelist(scanResult.package)}>
                         + Add to Whitelist
                       </button>
                     </div>
@@ -1385,7 +1385,7 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Icon name="alert" size={13}/>
-                      <h4 style={{ margin: 0, fontSize: 11, color: '#e4e7e3' }}>Blocked Threats</h4>
+                      <h4 style={{ margin: 0, fontSize: 12, color: '#e4e7e3' }}>Blocked Threats</h4>
                     </div>
                     <span className="count red-count">{slopFlags.length}</span>
                   </div>
@@ -1394,21 +1394,21 @@ export default function App() {
                     {slopFlags.map((s, idx) => (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#101713', border: '1px solid #362220', borderRadius: 4 }}>
                         <div>
-                          <strong style={{ font: "10px 'IBM Plex Mono'", color: '#ff9a92' }}>{s.package}</strong>
-                          <div style={{ fontSize: 8, color: '#889e8f' }}>{s.reason}</div>
+                          <strong style={{ font: "12px 'IBM Plex Mono'", color: '#ff9a92' }}>{s.package}</strong>
+                          <div style={{ fontSize: 12, color: '#889e8f' }}>{s.reason}</div>
                         </div>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 8 }} onClick={() => handleWhitelist(s.package)}>
+                          <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 12 }} onClick={() => handleWhitelist(s.package)}>
                             Whitelist
                           </button>
-                          <button className="btn-danger btn-sm" style={{ padding: '2px 6px', fontSize: 8 }} onClick={() => handleDeleteSlopFlag(s.package)}>
+                          <button className="btn-danger btn-sm" style={{ padding: '2px 6px', fontSize: 12 }} onClick={() => handleDeleteSlopFlag(s.package)}>
                             Dismiss
                           </button>
                         </div>
                       </div>
                     ))}
                     {!slopFlags.length && (
-                      <div style={{ padding: 24, textAlign: 'center', color: '#6f8374', fontSize: 10 }}>
+                      <div style={{ padding: 24, textAlign: 'center', color: '#6f8374', fontSize: 12 }}>
                         ✓ Zero active dependency threats detected.
                       </div>
                     )}
@@ -1418,25 +1418,25 @@ export default function App() {
                 {/* Whitelist Badges Card */}
                 <div style={{ background: '#141c18', border: '1px solid var(--line)', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 4, flexShrink: 0 }}>
-                    <h4 style={{ margin: 0, fontSize: 11, color: '#a5bda7' }}>Approved Whitelist ({whitelist.length})</h4>
+                    <h4 style={{ margin: 0, fontSize: 12, color: '#a5bda7' }}>Approved Whitelist ({whitelist.length})</h4>
                     <form onSubmit={handleAddWhitelistPackage} style={{ display: 'flex', gap: 4 }}>
                       <input
-                        style={{ padding: '3px 6px', background: '#101713', border: '1px solid #334537', borderRadius: 3, color: '#e4e7e3', fontSize: 9, width: 85 }}
+                        style={{ padding: '3px 6px', background: '#101713', border: '1px solid #334537', borderRadius: 3, color: '#e4e7e3', fontSize: 12, width: 85 }}
                         placeholder="Package..."
                         value={newWhitelistPkg}
                         onChange={e => setNewWhitelistPkg(e.target.value)}
                       />
-                      <button type="submit" className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 8 }}>+ Add</button>
+                      <button type="submit" className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 12 }}>+ Add</button>
                     </form>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 380, overflowY: 'auto', alignContent: 'flex-start' }}>
                     {whitelist.map(pkg => (
-                      <span key={pkg} className="chip chip-green" style={{ padding: '3px 8px', fontSize: 8.5 }}>
+                      <span key={pkg} className="chip chip-green" style={{ padding: '3px 8px', fontSize: 12 }}>
                         ✓ {pkg}
                       </span>
                     ))}
                     {whitelist.length === 0 && (
-                      <div style={{ color: '#6f8374', fontSize: 10, padding: '8px 0' }}>
+                      <div style={{ color: '#6f8374', fontSize: 12, padding: '8px 0' }}>
                         No whitelisted packages. Add safe packages above.
                       </div>
                     )}
@@ -1457,7 +1457,7 @@ export default function App() {
                   <Icon name="terminal" size={18}/>
                   <div>
                     <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Interactive Sandbox Console Workstation</strong>
-                    <div style={{ fontSize: 8, color: '#8fa092' }}>
+                    <div style={{ fontSize: 12, color: '#8fa092' }}>
                       Ephemeral sandbox <code>sbx_8f2a91</code> · Python 3.12 · pytest 8.3.2 · vLLM {config.model_config.model_name}
                     </div>
                   </div>
@@ -1497,7 +1497,7 @@ export default function App() {
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <Icon name="search" size={13}/>
                   <input
-                    style={{ background: 'transparent', border: 0, outline: 'none', color: '#cad6ca', fontSize: 9, width: 120 }}
+                    style={{ background: 'transparent', border: 0, outline: 'none', color: '#cad6ca', fontSize: 12, width: 120 }}
                     placeholder="Search logs..."
                     value={logSearchQuery}
                     onChange={e => setLogSearchQuery(e.target.value)}
@@ -1507,12 +1507,12 @@ export default function App() {
                 <div style={{ width: 1, height: 16, background: 'var(--line)' }}/>
 
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <span style={{ fontSize: 9, color: '#7a8e80' }}>Stage:</span>
+                  <span style={{ fontSize: 12, color: '#7a8e80' }}>Stage:</span>
                   {['ALL', 'SYSTEM', 'CLEARANCE', 'AST_ANALYSIS', 'DEPENDENCY_SCAN', 'REPRO_TEST', 'FUZZING', 'MERGE_GATE', 'SANDBOX'].map(st => (
                     <button
                       key={st}
                       className={`chip ${logStageFilter === st ? 'chip-green' : ''}`}
-                      style={{ cursor: 'pointer', fontSize: 8, padding: '1px 5px' }}
+                      style={{ cursor: 'pointer', fontSize: 12, padding: '1px 5px' }}
                       onClick={() => setLogStageFilter(st)}
                     >
                       {st}
@@ -1521,12 +1521,12 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginLeft: 'auto' }}>
-                  <span style={{ fontSize: 9, color: '#7a8e80' }}>Level:</span>
+                  <span style={{ fontSize: 12, color: '#7a8e80' }}>Level:</span>
                   {['ALL', 'INFO', 'WARN', 'ERROR', 'PASS'].map(lv => (
                     <button
                       key={lv}
                       className={`chip ${logLevelFilter === lv ? 'chip-blue' : ''}`}
-                      style={{ cursor: 'pointer', fontSize: 8, padding: '1px 5px' }}
+                      style={{ cursor: 'pointer', fontSize: 12, padding: '1px 5px' }}
                       onClick={() => setLogLevelFilter(lv)}
                     >
                       {lv}
@@ -1539,22 +1539,22 @@ export default function App() {
               <div style={{ background: '#0a100d', border: '1px solid #2d3f33', borderRadius: 6, minHeight: 460, maxHeight: 680, overflowY: 'auto', padding: 14, fontFamily: "'IBM Plex Mono', monospace" }}>
                 {filteredLogs.map(log => (
                   <div key={log.id} className="log-entry" style={{ padding: '3px 0', borderBottom: '1px solid #142018', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: '#5b7061', fontSize: 8 }}>[{log.timestamp}]</span>
-                    <span className="chip" style={{ fontSize: 7.5, padding: '1px 4px', color: '#9bc2a4', background: '#122018' }}>
+                    <span style={{ color: '#5b7061', fontSize: 12 }}>[{log.timestamp}]</span>
+                    <span className="chip" style={{ fontSize: 12, padding: '1px 4px', color: '#9bc2a4', background: '#122018' }}>
                       {log.stage}
                     </span>
-                    <span className={`chip ${log.level === 'PASS' ? 'chip-green' : log.level === 'WARN' ? 'chip-amber' : log.level === 'ERROR' || log.level === 'ALERT' ? 'chip-red' : 'chip-blue'}`} style={{ fontSize: 7.5, padding: '1px 4px' }}>
+                    <span className={`chip ${log.level === 'PASS' ? 'chip-green' : log.level === 'WARN' ? 'chip-amber' : log.level === 'ERROR' || log.level === 'ALERT' ? 'chip-red' : 'chip-blue'}`} style={{ fontSize: 12, padding: '1px 4px' }}>
                       {log.level}
                     </span>
-                    <span style={{ color: '#c9d8cc', fontSize: 10, flex: 1 }}>{log.message}</span>
+                    <span style={{ color: '#c9d8cc', fontSize: 12, flex: 1 }}>{log.message}</span>
                   </div>
                 ))}
                 {!filteredLogs.length && (
-                  <div style={{ padding: 30, textAlign: 'center', color: '#778a7e', fontSize: 10 }}>
+                  <div style={{ padding: 30, textAlign: 'center', color: '#778a7e', fontSize: 12 }}>
                     No execution log entries match the current filters.
                   </div>
                 )}
-                <div style={{ padding: '6px 8px', color: '#88a38f', fontSize: 10 }}>
+                <div style={{ padding: '6px 8px', color: '#88a38f', fontSize: 12 }}>
                   <span className="cursor">▍</span>
                 </div>
               </div>
@@ -1574,7 +1574,7 @@ export default function App() {
                   <h3 style={{ margin: 0, fontSize: 13, color: '#e4e7e3', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Icon name="settings" size={15}/> System Configuration & Clearance Policies
                   </h3>
-                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 9.5 }}>
+                  <p style={{ margin: '1px 0 0', color: '#7a8e80', fontSize: 12 }}>
                     Manage zero-trust verification rules, AI inference models, and webhook endpoints.
                   </p>
                 </div>
@@ -1604,7 +1604,7 @@ export default function App() {
               {settingsSubTab === 'rules' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
-                    <span style={{ fontSize: 11, color: '#97e8b0' }}>Zero-Trust Cryptographic & AST Clearance Policies</span>
+                    <span style={{ fontSize: 12, color: '#97e8b0' }}>Zero-Trust Cryptographic & AST Clearance Policies</span>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <button className="btn-secondary btn-sm" onClick={() => {
                         setConfig({
@@ -1633,11 +1633,11 @@ export default function App() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
                     <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CONTRIBUTOR REPUTATION GATE</div>
+                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CONTRIBUTOR REPUTATION GATE</div>
                       <div className="form-field" style={{ margin: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                           <label style={{ margin: 0 }}>Minimum Fast-Track Trust Score</label>
-                          <span className="chip chip-green" style={{ fontSize: 9 }}>{config.verification_rules.min_trust_score} / 100</span>
+                          <span className="chip chip-green" style={{ fontSize: 12 }}>{config.verification_rules.min_trust_score} / 100</span>
                         </div>
                         <input
                           type="range"
@@ -1652,8 +1652,8 @@ export default function App() {
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
                         <div>
-                          <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Quarantine First-Time & Bot Accounts</strong>
-                          <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Auto-Quarantine First-Time & Bot Accounts</strong>
+                          <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
                             Zero-trust hold on unverified personas until maintainer review.
                           </div>
                         </div>
@@ -1672,11 +1672,11 @@ export default function App() {
                     </div>
 
                     <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CODE AUDIT & SLOP DEFENSE</div>
+                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>CODE AUDIT & SLOP DEFENSE</div>
                       <div className="form-field" style={{ margin: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                           <label style={{ margin: 0 }}>AST Blast Radius Threshold</label>
-                          <span className="chip chip-blue" style={{ fontSize: 9 }}>&le; &Delta;{config.verification_rules.blast_radius_threshold} statements</span>
+                          <span className="chip chip-blue" style={{ fontSize: 12 }}>&le; &Delta;{config.verification_rules.blast_radius_threshold} statements</span>
                         </div>
                         <input
                           type="number"
@@ -1689,8 +1689,8 @@ export default function App() {
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
                         <div>
-                          <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Strict PyPI Slopsquatting Protection</strong>
-                          <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Strict PyPI Slopsquatting Protection</strong>
+                          <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
                             Rejects unindexed packages & hallucinated AI dependencies.
                           </div>
                         </div>
@@ -1715,7 +1715,7 @@ export default function App() {
               {settingsSubTab === 'models' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
-                    <span style={{ fontSize: 11, color: '#97e8b0' }}>LLM Inference Engine & Open-Weight Reasoning Configuration</span>
+                    <span style={{ fontSize: 12, color: '#97e8b0' }}>LLM Inference Engine & Open-Weight Reasoning Configuration</span>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <button className="btn-secondary btn-sm" disabled={llmTesting} onClick={handleTestLLM}>
                         <Icon name="activity" size={11}/> {llmTesting ? 'Pinging LLM…' : 'Test LLM Connection'}
@@ -1737,7 +1737,7 @@ export default function App() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
                     <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>ACTIVE INFERENCE BACKEND</div>
+                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>ACTIVE INFERENCE BACKEND</div>
                       <div className="form-field" style={{ margin: 0 }}>
                         <label style={{ marginBottom: 3 }}>Primary Code Model</label>
                         <select
@@ -1779,11 +1779,11 @@ export default function App() {
                     </div>
 
                     <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>REASONING PARAMETERS</div>
+                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>REASONING PARAMETERS</div>
                       <div className="form-field" style={{ margin: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                           <label style={{ margin: 0 }}>Sampling Temperature</label>
-                          <span className="chip chip-amber" style={{ fontSize: 9 }}>{config.model_config.temperature}</span>
+                          <span className="chip chip-amber" style={{ fontSize: 12 }}>{config.model_config.temperature}</span>
                         </div>
                         <input
                           type="range"
@@ -1820,7 +1820,7 @@ export default function App() {
               {settingsSubTab === 'repo' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111915', border: '1px solid #233427', borderRadius: 5 }}>
-                    <span style={{ fontSize: 11, color: '#97e8b0' }}>Webhook Endpoint Security & Sandbox Execution Limits</span>
+                    <span style={{ fontSize: 12, color: '#97e8b0' }}>Webhook Endpoint Security & Sandbox Execution Limits</span>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <button className="btn-secondary btn-sm" onClick={() => {
                         const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
@@ -1844,7 +1844,7 @@ export default function App() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
                     <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>GITHUB WEBHOOK RECEIVER</div>
+                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>GITHUB WEBHOOK RECEIVER</div>
                       <div className="form-field" style={{ margin: 0 }}>
                         <label style={{ marginBottom: 3 }}>Target Webhook URL</label>
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -1886,11 +1886,11 @@ export default function App() {
                     </div>
 
                     <div style={{ background: '#141c18', border: '1px solid #2e3e33', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ font: "9px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>EXECUTION & MERGE GATE</div>
+                      <div style={{ font: "12px 'IBM Plex Mono'", color: '#8fa594', letterSpacing: 1 }}>EXECUTION & MERGE GATE</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
                         <div>
-                          <strong style={{ fontSize: 11, color: '#e4e7e3' }}>Auto-Merge on Full Verification Pass</strong>
-                          <div style={{ fontSize: 8, color: '#7a8e80', marginTop: 1 }}>
+                          <strong style={{ fontSize: 12, color: '#e4e7e3' }}>Auto-Merge on Full Verification Pass</strong>
+                          <div style={{ fontSize: 12, color: '#7a8e80', marginTop: 1 }}>
                             Merges PRs passing RED&rarr;GREEN proofs and surviving fuzzing.
                           </div>
                         </div>
@@ -1909,7 +1909,7 @@ export default function App() {
                       <div className="form-field" style={{ margin: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                           <label style={{ margin: 0 }}>Sandbox Execution Timeout</label>
-                          <span className="chip chip-blue" style={{ fontSize: 9 }}>{config.repo_settings.sandbox_timeout_sec} seconds</span>
+                          <span className="chip chip-blue" style={{ fontSize: 12 }}>{config.repo_settings.sandbox_timeout_sec} seconds</span>
                         </div>
                         <input
                           type="range"
@@ -1929,8 +1929,8 @@ export default function App() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Icon name="alert" size={14}/>
                       <div>
-                        <strong style={{ fontSize: 10, color: '#ff9a92' }}>Danger Zone · Purge Session & Simulation Data</strong>
-                        <div style={{ fontSize: 8, color: '#c99692' }}>Permanently resets PR queue, bug proofs, and simulation data to zero state.</div>
+                        <strong style={{ fontSize: 12, color: '#ff9a92' }}>Danger Zone · Purge Session & Simulation Data</strong>
+                        <div style={{ fontSize: 12, color: '#c99692' }}>Permanently resets PR queue, bug proofs, and simulation data to zero state.</div>
                       </div>
                     </div>
                     <button className="btn-danger btn-sm" onClick={handleResetAllData}>
@@ -2025,7 +2025,7 @@ export default function App() {
                       {githubUser.authenticated ? 'AUTHORIZED' : 'DISCONNECTED'}
                     </span>
                   </div>
-                  <div style={{ fontSize: 11, color: '#8fa092', marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: '#8fa092', marginTop: 2 }}>
                     {githubUser.authenticated ? (
                       `@${githubUser.username} · ${repos.length} Repositories Connected`
                     ) : (
@@ -2057,7 +2057,7 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 9, color: '#7a8e80' }}>
+                  <span style={{ fontSize: 12, color: '#7a8e80' }}>
                     Authorizing loads your authentic repositories from GitHub.
                   </span>
                   <button className="btn-primary btn-sm" onClick={handleAuthorizeGitHub}>
@@ -2068,22 +2068,22 @@ export default function App() {
 
               {/* Add Custom Repository Section */}
               <div style={{ background: '#121c16', border: '1px solid var(--line)', padding: 14, borderRadius: 6, marginBottom: 18 }}>
-                <strong style={{ fontSize: 11, color: '#a5bda7', display: 'block', marginBottom: 8 }}>+ Connect New Custom Repository</strong>
+                <strong style={{ fontSize: 12, color: '#a5bda7', display: 'block', marginBottom: 8 }}>+ Connect New Custom Repository</strong>
                 <form onSubmit={handleAddCustomRepo} style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 1fr auto', gap: 8, alignItems: 'center' }}>
                   <input
-                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
+                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 12 }}
                     placeholder="Repo name (e.g. backend-api)"
                     value={newRepoName}
                     onChange={e => setNewRepoName(e.target.value)}
                   />
                   <input
-                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
+                    style={{ padding: '6px 10px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 12 }}
                     placeholder="Description (optional)"
                     value={newRepoDesc}
                     onChange={e => setNewRepoDesc(e.target.value)}
                   />
                   <select
-                    style={{ padding: '6px 8px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 10 }}
+                    style={{ padding: '6px 8px', background: '#16221b', border: '1px solid #334537', borderRadius: 4, color: '#e4e7e3', fontSize: 12 }}
                     value={newRepoLang}
                     onChange={e => setNewRepoLang(e.target.value)}
                   >
@@ -2127,10 +2127,10 @@ export default function App() {
                           {r.is_private && <span className="chip chip-amber">PRIVATE</span>}
                           {r.full_name === activeRepo && <span className="chip chip-green">ACTIVE</span>}
                         </div>
-                        <div style={{ fontSize: 10, color: '#8fa092', marginTop: 3 }}>
+                        <div style={{ fontSize: 12, color: '#8fa092', marginTop: 3 }}>
                           {r.description}
                         </div>
-                        <div style={{ fontSize: 9, color: '#6d8173', marginTop: 4, display: 'flex', gap: 12 }}>
+                        <div style={{ fontSize: 12, color: '#6d8173', marginTop: 4, display: 'flex', gap: 12 }}>
                           <span>★ {r.stars}</span>
                           <span>Forks: {r.forks}</span>
                           <span>Open PRs: {r.open_prs}</span>
@@ -2164,7 +2164,7 @@ export default function App() {
                     </div>
                   ))}
                   {repos.length === 0 && (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#778a7d', fontSize: 11 }}>
+                    <div style={{ padding: 24, textAlign: 'center', color: '#778a7d', fontSize: 12 }}>
                       No repositories connected yet. Enter your GitHub username above or use "+ Connect New Custom Repository".
                     </div>
                   )}
@@ -2208,7 +2208,7 @@ export default function App() {
                     required
                   />
                 </div>
-                <div style={{ padding: 12, background: '#18241d', border: '1px solid #334737', borderRadius: 4, fontSize: 10, color: '#9bb0a0' }}>
+                <div style={{ padding: 12, background: '#18241d', border: '1px solid #334737', borderRadius: 4, fontSize: 12, color: '#9bb0a0' }}>
                   <strong>Autonomous Pipeline:</strong> Llama-3.3-70B on Groq LPU analyzes codebase AST context, generates a standalone <code>test_repro_{newIssueNumber}.py</code>, and executes it in an ephemeral sandbox to verify the test is initially RED.
                 </div>
               </div>
@@ -2232,7 +2232,7 @@ export default function App() {
               <button className="icon-button" onClick={() => setCodeDrawer(null)}><Icon name="close" size={16}/></button>
             </div>
             <div className="modal-body">
-              <pre style={{ margin: 0, padding: 14, background: '#090e0c', border: '1px solid #27382d', borderRadius: 6, font: "11px/1.8 'IBM Plex Mono', monospace", color: '#8de8a4', overflowX: 'auto' }}>
+              <pre style={{ margin: 0, padding: 14, background: '#090e0c', border: '1px solid #27382d', borderRadius: 6, font: "13px/1.8 'IBM Plex Mono', monospace", color: '#8de8a4', overflowX: 'auto' }}>
                 {codeDrawer.code}
               </pre>
             </div>
@@ -2261,8 +2261,8 @@ export default function App() {
             <div className="modal-body" style={{ maxHeight: 320 }}>
               {events.length > 0 ? (
                 events.slice(0, 6).map(evt => (
-                  <div key={evt.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', fontSize: 11 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8fa092', fontSize: 9 }}>
+                  <div key={evt.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8fa092', fontSize: 12 }}>
                       <span>{evt.stage}</span>
                       <span>{timeAgo(evt.timestamp)}</span>
                     </div>
@@ -2270,7 +2270,7 @@ export default function App() {
                   </div>
                 ))
               ) : (
-                <div style={{ padding: 20, textAlign: 'center', color: '#7a8e80', fontSize: 11 }}>
+                <div style={{ padding: 20, textAlign: 'center', color: '#7a8e80', fontSize: 12 }}>
                   No notifications yet.
                 </div>
               )}
@@ -2316,11 +2316,11 @@ function Row({ row: r, expanded, toggle, timeAgo, mapStatus, badgeClass, scoreCl
         </td>
         <td>
           {r.blast_radius ? (
-            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 9, color: (r.blast_radius.statement_delta > 50) ? '#ff7b72' : '#56d364' }}>
+            <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: (r.blast_radius.statement_delta > 50) ? '#ff7b72' : '#56d364' }}>
               Δ{r.blast_radius.statement_delta} {r.blast_radius.scope_creep_detected && '⚠'}
             </span>
           ) : (
-            <span style={{ fontSize: 9, color: '#7a8e80' }}>-</span>
+            <span style={{ fontSize: 12, color: '#7a8e80' }}>-</span>
           )}
         </td>
         <td>

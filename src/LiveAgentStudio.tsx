@@ -730,10 +730,10 @@ export default function LiveAgentStudio({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span className="chip chip-blue" style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8 }}>
+              <span className="chip chip-blue" style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8 }}>
                 ⚡ AUTONOMOUS AGENT WORKBENCH
               </span>
-              <span style={{ color: '#8fa092', fontSize: 11, fontFamily: "'IBM Plex Mono', monospace" }}>
+              <span style={{ color: '#8fa092', fontSize: 12, fontFamily: "'IBM Plex Mono', monospace" }}>
                 Active Model: <strong style={{ color: '#80e2a7' }}>Llama-3.3-70B (Groq LPU)</strong> · 24ms/tok
               </span>
             </div>
@@ -747,7 +747,7 @@ export default function LiveAgentStudio({
 
           {/* Scenario Picker Dropdown */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 11, color: '#8fa092', fontWeight: 600 }}>SCENARIO:</span>
+            <span style={{ fontSize: 12, color: '#8fa092', fontWeight: 600 }}>SCENARIO:</span>
             <select
               value={selectedScenarioId}
               onChange={e => setSelectedScenarioId(e.target.value)}
@@ -834,7 +834,7 @@ export default function LiveAgentStudio({
 
           {/* Speed Toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 10, color: '#8fa092', fontWeight: 600 }}>SPEED:</span>
+            <span style={{ fontSize: 12, color: '#8fa092', fontWeight: 600 }}>SPEED:</span>
             {[
               { val: 1, label: '1x (Normal)' },
               { val: 2, label: '2.5x (Fast)' },
@@ -846,7 +846,7 @@ export default function LiveAgentStudio({
                 onClick={() => setSpeed(s.val)}
                 style={{
                   padding: '3px 8px',
-                  fontSize: 10,
+                  fontSize: 12,
                   cursor: 'pointer',
                   border: speed === s.val ? '1px solid #3fb950' : '1px solid #30363d',
                   background: speed === s.val ? '#1f6feb25' : 'transparent',
@@ -905,7 +905,7 @@ export default function LiveAgentStudio({
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
                   <span style={{
                     fontFamily: "'IBM Plex Mono', monospace",
-                    fontSize: 9,
+                    fontSize: 12,
                     color: isCurrent ? '#79c0ff' : isCompleted ? '#56d364' : '#6e7681',
                     fontWeight: 700
                   }}>
@@ -919,7 +919,7 @@ export default function LiveAgentStudio({
                   }}/>
                 </div>
                 <div style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 650,
                   color: isCurrent ? '#f0f6fc' : isCompleted ? '#c9d1d9' : '#8b949e',
                   whiteSpace: 'nowrap',
@@ -974,7 +974,7 @@ export default function LiveAgentStudio({
             <div style={{ fontSize: 13, fontWeight: 700, color: '#f0f6fc' }}>
               {PHASE_CONFIG[phase].title}
             </div>
-            <div style={{ fontSize: 11, color: '#8b949e' }}>
+            <div style={{ fontSize: 12, color: '#8b949e' }}>
               {PHASE_CONFIG[phase].desc}
             </div>
           </div>
@@ -982,19 +982,19 @@ export default function LiveAgentStudio({
 
         {/* Phase Telemetry Chips */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="chip" style={{ fontSize: 10, background: '#1c2430', color: '#79c0ff', border: '1px solid #303e54' }}>
+          <span className="chip" style={{ fontSize: 12, background: '#1c2430', color: '#79c0ff', border: '1px solid #303e54' }}>
             File: <code>{scenario.file}</code>
           </span>
-          <span className="chip" style={{ fontSize: 10, background: '#1c2430', color: '#bc8cff', border: '1px solid #3f3254' }}>
+          <span className="chip" style={{ fontSize: 12, background: '#1c2430', color: '#bc8cff', border: '1px solid #3f3254' }}>
             Function: <code>{scenario.targetFunction}()</code>
           </span>
           {phase >= 4 && (
-            <span className="chip" style={{ fontSize: 10, background: '#142e1d', color: '#56d364', border: '1px solid #238636' }}>
+            <span className="chip" style={{ fontSize: 12, background: '#142e1d', color: '#56d364', border: '1px solid #238636' }}>
               Diff: +{scenario.diffSummary.additions} / -{scenario.diffSummary.deletions} lines
             </span>
           )}
           {phase >= 6 && (
-            <span className="chip chip-blue" style={{ fontSize: 10 }}>
+            <span className="chip chip-blue" style={{ fontSize: 12 }}>
               Fuzzing: {fuzzingProgress} / 128 tested
             </span>
           )}
@@ -1035,14 +1035,14 @@ export default function LiveAgentStudio({
                 <strong style={{ fontSize: 13.5, color: '#f0f6fc' }}>
                   Zero-Trust Gate Cleared — Algorithmic Fix Ready for GitHub Incorporation
                 </strong>
-                <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, background: '#238636', color: '#fff', fontWeight: 700 }}>
+                <span style={{ fontSize: 12, padding: '2px 7px', borderRadius: 4, background: '#238636', color: '#fff', fontWeight: 700 }}>
                   128/128 MUTATIONS PASSED
                 </span>
-                <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, background: '#1f6feb30', color: '#79c0ff', border: '1px solid #1f6feb80', fontWeight: 600 }}>
+                <span style={{ fontSize: 12, padding: '2px 7px', borderRadius: 4, background: '#1f6feb30', color: '#79c0ff', border: '1px solid #1f6feb80', fontWeight: 600 }}>
                   0 CHEATS DETECTED
                 </span>
               </div>
-              <p style={{ margin: '4px 0 0', fontSize: 11, color: '#8b949e', lineHeight: 1.5 }}>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#8b949e', lineHeight: 1.5 }}>
                 Defect reproduced mathematically [RED], patched surgically in AST (+{scenario.diffSummary.additions} lines), verified [GREEN] in 32ms, and cleared against 128 adversarial mutation tests.
               </p>
             </div>
@@ -1057,7 +1057,7 @@ export default function LiveAgentStudio({
                   target="_blank"
                   rel="noreferrer"
                   className="btn-secondary btn-sm"
-                  style={{ padding: '2px 8px', fontSize: 10, color: '#79c0ff' }}
+                  style={{ padding: '2px 8px', fontSize: 12, color: '#79c0ff' }}
                 >
                   View on GitHub ↗
                 </a>
@@ -1093,7 +1093,7 @@ export default function LiveAgentStudio({
                 navigator.clipboard?.writeText(scenario.patchedCode)
                 if (setNotice) setNotice('Patched code copied to clipboard!')
               }}
-              style={{ padding: '8px 12px', fontSize: 11 }}
+              style={{ padding: '8px 12px', fontSize: 12 }}
             >
               📋 Copy Patch
             </button>
@@ -1119,7 +1119,7 @@ export default function LiveAgentStudio({
                 padding: '6px 14px',
                 borderRadius: '6px 6px 0 0',
                 border: '0',
-                fontSize: 11.5,
+                fontSize: 12,
                 fontWeight: activeTab === t.id ? 650 : 500,
                 color: activeTab === t.id ? '#f0f6fc' : '#8b949e',
                 background: activeTab === t.id ? '#1c2432' : 'transparent',
@@ -1133,7 +1133,7 @@ export default function LiveAgentStudio({
               <span>{t.label}</span>
               {t.badge && (
                 <span style={{
-                  fontSize: 8.5,
+                  fontSize: 12,
                   padding: '1px 5px',
                   borderRadius: 3,
                   fontWeight: 700,
@@ -1161,11 +1161,11 @@ export default function LiveAgentStudio({
               borderBottom: '1px solid #232d3d'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#c9d1d9' }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#c9d1d9' }}>
                   📄 <strong>{scenario.file}</strong>
                 </span>
                 <span style={{
-                  fontSize: 9,
+                  fontSize: 12,
                   padding: '2px 6px',
                   borderRadius: 3,
                   background: phase >= 4 ? '#23863625' : '#30363d',
@@ -1175,7 +1175,7 @@ export default function LiveAgentStudio({
                   {phase >= 4 ? 'MODEL MANIPULATION APPLIED (+4, -1)' : 'ORIGINAL CODE (VULNERABILITY PRESENT)'}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 10, color: '#8b949e' }}>
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: '#8b949e' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ width: 8, height: 8, background: '#f85149', borderRadius: 2 }}/> Red: Buggy line
                 </span>
@@ -1193,11 +1193,11 @@ export default function LiveAgentStudio({
                 background: '#0d1117',
                 padding: '12px 0',
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 11,
+                fontSize: 12,
                 lineHeight: 1.6,
                 overflowX: 'auto'
               }}>
-                <div style={{ padding: '0 14px 8px 14px', borderBottom: '1px solid #1c2430', color: '#8b949e', fontSize: 10, fontWeight: 700 }}>
+                <div style={{ padding: '0 14px 8px 14px', borderBottom: '1px solid #1c2430', color: '#8b949e', fontSize: 12, fontWeight: 700 }}>
                   BASELINE ORIGINAL (BUGGY)
                 </div>
                 {originalLines.map((line, idx) => {
@@ -1238,11 +1238,11 @@ export default function LiveAgentStudio({
                 background: '#0b1015',
                 padding: '12px 0',
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 11,
+                fontSize: 12,
                 lineHeight: 1.6,
                 overflowX: 'auto'
               }}>
-                <div style={{ padding: '0 14px 8px 14px', borderBottom: '1px solid #1c2430', color: '#56d364', fontSize: 10, fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ padding: '0 14px 8px 14px', borderBottom: '1px solid #1c2430', color: '#56d364', fontSize: 12, fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
                   <span>MODEL MANIPULATED (PATCHED)</span>
                   {phase >= 4 && <span style={{ color: '#56d364' }}>✓ 0 CHEATS DETECTED</span>}
                 </div>
@@ -1296,7 +1296,7 @@ export default function LiveAgentStudio({
               padding: '10px 16px',
               background: '#151d27',
               borderTop: '1px solid #232d3d',
-              fontSize: 11
+              fontSize: 12
             }}>
               <span style={{ color: '#8fa092' }}>
                 AST Blast-Radius: <strong style={{ color: '#56d364' }}>+{scenario.astStats.statementDelta} statements</strong> · Scope Creep: <strong style={{ color: '#56d364' }}>None</strong>
@@ -1337,10 +1337,10 @@ export default function LiveAgentStudio({
               borderBottom: '1px solid #232d3d'
             }}>
               <div>
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#f0f6fc', fontWeight: 650 }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#f0f6fc', fontWeight: 650 }}>
                   📝 test_repro_{scenario.issueNumber}.py
                 </span>
-                <span style={{ color: '#8b949e', fontSize: 10, marginLeft: 8 }}>
+                <span style={{ color: '#8b949e', fontSize: 12, marginLeft: 8 }}>
                   (Autonomous failure proof synthesized by Llama-3.3-70B on Groq LPU)
                 </span>
               </div>
@@ -1358,7 +1358,7 @@ export default function LiveAgentStudio({
             <div style={{
               padding: '16px',
               fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 11.5,
+              fontSize: 12,
               lineHeight: 1.6,
               background: '#0d1117',
               color: '#a5d6ff',
@@ -1373,7 +1373,7 @@ export default function LiveAgentStudio({
             </div>
 
             <div style={{ padding: '10px 16px', background: '#151d27', borderTop: '1px solid #232d3d', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: '#8b949e' }}>
+              <span style={{ fontSize: 12, color: '#8b949e' }}>
                 Zero-Trust Rule 1: This test MUST initially FAIL (RED) to establish mathematical proof of defect.
               </span>
               <button className="btn-primary btn-sm" onClick={() => advanceToPhase(3)}>
@@ -1396,7 +1396,7 @@ export default function LiveAgentStudio({
                   <strong style={{ fontSize: 12, color: '#f0f6fc' }}>1. Initial Sandbox Run (Unpatched)</strong>
                 </div>
                 <span style={{
-                  fontSize: 9,
+                  fontSize: 12,
                   fontWeight: 700,
                   padding: '2px 6px',
                   borderRadius: 3,
@@ -1412,7 +1412,7 @@ export default function LiveAgentStudio({
                 padding: 12,
                 borderRadius: 6,
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 10.5,
+                fontSize: 12,
                 lineHeight: 1.5,
                 color: phase >= 3 ? '#ff7b72' : '#8b949e',
                 maxHeight: 280,
@@ -1422,7 +1422,7 @@ export default function LiveAgentStudio({
                 {phase >= 3 ? scenario.redTestOutput.stdout : `# Click 'Run Autonomous Workflow' or Phase 3 to execute initial sandbox proof.\n$ ${scenario.redTestOutput.command}`}
               </div>
 
-              <div style={{ marginTop: 10, fontSize: 11, color: '#8fa092' }}>
+              <div style={{ marginTop: 10, fontSize: 12, color: '#8fa092' }}>
                 {phase >= 3 ? (
                   <span style={{ color: '#ff7b72' }}>
                     ❌ <strong>Mathematical proof established:</strong> Unpatched code accepted invalid input.
@@ -1441,7 +1441,7 @@ export default function LiveAgentStudio({
                   <strong style={{ fontSize: 12, color: '#f0f6fc' }}>2. Verified Sandbox Run (With Model Patch)</strong>
                 </div>
                 <span style={{
-                  fontSize: 9,
+                  fontSize: 12,
                   fontWeight: 700,
                   padding: '2px 6px',
                   borderRadius: 3,
@@ -1457,7 +1457,7 @@ export default function LiveAgentStudio({
                 padding: 12,
                 borderRadius: 6,
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 10.5,
+                fontSize: 12,
                 lineHeight: 1.5,
                 color: phase >= 5 ? '#7ee787' : '#8b949e',
                 maxHeight: 280,
@@ -1467,7 +1467,7 @@ export default function LiveAgentStudio({
                 {phase >= 5 ? scenario.greenTestOutput.stdout : `# Awaiting Phase 5 verification run against patched code.\n$ ${scenario.greenTestOutput.command}`}
               </div>
 
-              <div style={{ marginTop: 10, fontSize: 11, color: '#8fa092' }}>
+              <div style={{ marginTop: 10, fontSize: 12, color: '#8fa092' }}>
                 {phase >= 5 ? (
                   <span style={{ color: '#56d364' }}>
                     ✅ <strong>RED ➔ GREEN Flip Verified:</strong> All assertions passed without regression.
@@ -1490,16 +1490,16 @@ export default function LiveAgentStudio({
                 <h3 style={{ fontSize: 14, color: '#f0f6fc', fontWeight: 650, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span>🛡</span> Llama Adversarial Fuzzing Engine — 128 Boundary Mutations
                 </h3>
-                <p style={{ fontSize: 11, color: '#8b949e', marginTop: 2 }}>
+                <p style={{ fontSize: 12, color: '#8b949e', marginTop: 2 }}>
                   Every PR fix is challenged with 128 edge-case mutations (Null bytes, boundary floats, race states) to eliminate hardcoded cheats.
                 </p>
               </div>
 
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <span className="chip chip-blue" style={{ fontSize: 11, fontWeight: 700 }}>
+                <span className="chip chip-blue" style={{ fontSize: 12, fontWeight: 700 }}>
                   {fuzzingProgress} / 128 MUTATIONS EVALUATED
                 </span>
-                <span className="chip chip-green" style={{ fontSize: 11, fontWeight: 700 }}>
+                <span className="chip chip-green" style={{ fontSize: 12, fontWeight: 700 }}>
                   0 CHEATS DETECTED
                 </span>
                 <button
@@ -1537,7 +1537,7 @@ export default function LiveAgentStudio({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 8.5,
+                      fontSize: 12,
                       fontWeight: 700,
                       fontFamily: "'IBM Plex Mono', monospace",
                       background: isPassed ? '#238636' : isTesting ? '#1f6feb' : '#1c2430',
@@ -1564,7 +1564,7 @@ export default function LiveAgentStudio({
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              fontSize: 11
+              fontSize: 12
             }}>
               {hoveredMutation ? (
                 <div>
@@ -1591,7 +1591,7 @@ export default function LiveAgentStudio({
             <h3 style={{ fontSize: 14, color: '#f0f6fc', fontWeight: 650, marginBottom: 8 }}>
               AST Blast-Radius & Scope Creep Analysis
             </h3>
-            <p style={{ fontSize: 11, color: '#8b949e', marginBottom: 14 }}>
+            <p style={{ fontSize: 12, color: '#8b949e', marginBottom: 14 }}>
               Zero-Trust Gatekeeper verifies statement deltas to stop bloated or scope-creeping pull requests.
             </p>
 
@@ -1603,9 +1603,9 @@ export default function LiveAgentStudio({
                 { label: 'DEPENDENCIES ADDED', val: '0', note: 'No hallucinated imports', status: 'PASS' },
               ].map(m => (
                 <div key={m.label} style={{ padding: 12, background: '#161e2a', borderRadius: 6, border: '1px solid #28374d' }}>
-                  <div style={{ fontSize: 9.5, color: '#8b949e', fontWeight: 700 }}>{m.label}</div>
+                  <div style={{ fontSize: 12, color: '#8b949e', fontWeight: 700 }}>{m.label}</div>
                   <div style={{ fontSize: 18, color: '#56d364', fontWeight: 700, margin: '4px 0' }}>{m.val}</div>
-                  <div style={{ fontSize: 10, color: '#8fa092' }}>{m.note}</div>
+                  <div style={{ fontSize: 12, color: '#8fa092' }}>{m.note}</div>
                 </div>
               ))}
             </div>
@@ -1616,7 +1616,7 @@ export default function LiveAgentStudio({
               borderRadius: 6,
               border: '1px solid #202b3a',
               fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 11,
+              fontSize: 12,
               lineHeight: 1.6,
               color: '#c9d1d9'
             }}>
@@ -1641,11 +1641,11 @@ export default function LiveAgentStudio({
       {/* ── Model Thought Stream & Real-Time Reasoning Log ── */}
       <div className="panel" style={{ padding: 14, background: '#0e1217', borderColor: '#232b38' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#8fa092', fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8fa092', fontWeight: 700 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#58a6ff', animation: 'pulse 1.5s infinite' }}/>
             LIVE AGENT REASONING STREAM & GROQ LPU TELEMETRY
           </div>
-          <span style={{ fontSize: 10, color: '#6e7681', fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span style={{ fontSize: 12, color: '#6e7681', fontFamily: "'IBM Plex Mono', monospace" }}>
             vLLM Context: 128k · Temperature: 0.15
           </span>
         </div>
@@ -1659,7 +1659,7 @@ export default function LiveAgentStudio({
             borderRadius: 6,
             padding: '8px 12px',
             fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 10.5,
+            fontSize: 12,
             lineHeight: 1.5,
             border: '1px solid #1a222e'
           }}
