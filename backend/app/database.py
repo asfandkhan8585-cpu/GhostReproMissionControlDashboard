@@ -100,6 +100,53 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+
+        # Migration: ensure pull_requests has all necessary columns
+        cursor.execute("PRAGMA table_info(pull_requests)")
+        pr_cols = [c["name"] for c in cursor.fetchall()]
+        if pr_cols:
+            required_pr_cols = {
+                "number": "INTEGER",
+                "repo": "TEXT",
+                "title": "TEXT",
+                "author": "TEXT",
+                "author_avatar": "TEXT",
+                "author_association": "TEXT",
+                "trust_score": "INTEGER DEFAULT 0",
+                "status": "TEXT DEFAULT 'QUARANTINED'",
+                "tier": "TEXT DEFAULT 'QUARANTINE_QUEUE'",
+                "blast_radius_json": "TEXT",
+                "dependencies_json": "TEXT",
+                "test_result_json": "TEXT",
+                "pipeline_stage": "TEXT DEFAULT 'QUARANTINE_EVAL'",
+                "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            }
+            for col_name, col_type in required_pr_cols.items():
+                if col_name not in pr_cols:
+                    cursor.execute(f"ALTER TABLE pull_requests ADD COLUMN {col_name} {col_type}")
+
+        # Migration: ensure repositories has all necessary columns
+        cursor.execute("PRAGMA table_info(repositories)")
+        repo_cols = [c["name"] for c in cursor.fetchall()]
+        if repo_cols:
+            required_repo_cols = {
+                "full_name": "TEXT",
+                "name": "TEXT",
+                "description": "TEXT",
+                "is_active": "INTEGER DEFAULT 0",
+                "is_private": "INTEGER DEFAULT 0",
+                "stars": "INTEGER DEFAULT 0",
+                "forks": "INTEGER DEFAULT 0",
+                "open_prs": "INTEGER DEFAULT 0",
+                "quarantined_prs": "INTEGER DEFAULT 0",
+                "repro_tests": "INTEGER DEFAULT 0",
+                "language": "TEXT DEFAULT 'Python'",
+                "default_branch": "TEXT DEFAULT 'main'",
+                "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            }
+            for col_name, col_type in required_repo_cols.items():
+                if col_name not in repo_cols:
+                    cursor.execute(f"ALTER TABLE repositories ADD COLUMN {col_name} {col_type}")
         
         # Check bug_reproductions schema: ensure composite primary key (repo, issue_number)
         cursor.execute("PRAGMA table_info(bug_reproductions)")
@@ -494,3 +541,23 @@ def get_full_config() -> dict | None:
             if r["config_json"]:
                 res[r["section"]] = json.loads(r["config_json"])
         return res
+
+
+def clear_all_logs():
+    """Removes all stored logs from execution_logs table."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM execution_logs")
+
+
+def clear_transient_tables():
+    """Purges transient demo/runtime state from database while preserving users and repositories."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pull_requests")
+        cursor.execute("DELETE FROM pipeline_events")
+        cursor.execute("DELETE FROM slop_flags")
+        cursor.execute("DELETE FROM package_whitelist")
+        cursor.execute("DELETE FROM bug_reproductions")
+        cursor.execute("DELETE FROM execution_logs")
+

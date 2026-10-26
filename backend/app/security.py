@@ -81,7 +81,11 @@ def check_user_clearance(username: str, author_association: str) -> dict:
     }
 
 def scan_pypi_dependencies(requirements_text: str) -> list:
-    """PyPI Slopsquatting scanner: flags packages that don't exist or have no releases."""
+    """PyPI Slopsquatting scanner: flags packages that don't exist on PyPI or have zero releases.
+    
+    Zero-mock: Flags as hallucinated ONLY on HTTP 404 from official PyPI index.
+    Network timeouts and server errors (5xx) are handled cleanly without false hallucinated flags.
+    """
     flagged_packages = []
     seen = set()
     for line in requirements_text.splitlines():
@@ -98,15 +102,17 @@ def scan_pypi_dependencies(requirements_text: str) -> list:
                     "reason": "Hallucinated Package (Does not exist on PyPI!)"
                 })
             elif response.status_code == 200:
-                data = response.json()
-                if not data.get("releases"):
-                    flagged_packages.append({
-                        "package": pkg_name,
-                        "reason": "No valid releases found on PyPI."
-                    })
-        except requests.RequestException as e:
-            flagged_packages.append({
-                "package": pkg_name,
-                "reason": f"PyPI verification request error: {str(e)}"
-            })
+                try:
+                    data = response.json()
+                    releases = data.get("releases", {})
+                    if not releases:
+                        flagged_packages.append({
+                            "package": pkg_name,
+                            "reason": "Squatted / Placeholder package (0 releases found on PyPI)."
+                        })
+                except Exception:
+                    pass
+        except requests.RequestException:
+            # Network/timeout error: do not fabricate hallucination status
+            continue
     return flagged_packages

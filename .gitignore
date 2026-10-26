@@ -30,6 +30,7 @@ env/
 backend/data/
 *.db
 *.sqlite*
+backend/tests/repros/
 
 # Test browser profiles & screenshots
 edge_shot_dir/
