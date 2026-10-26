@@ -5,7 +5,9 @@ AST blast-radius analyzer, sandboxed pytest runner, and exposes real-time data
 for the Mission Control Dashboard.
 """
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
+from starlette.responses import JSONResponse
+import secrets
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Any
@@ -57,6 +59,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Existing authorize route establishes a short-lived, HttpOnly maintainer session.
+_sessions: dict[str, float] = {}
+
+@app.middleware("http")
+async def require_maintainer(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path not in {"/webhook", "/api/github/authorize"}:
+        session = request.cookies.get("ghostrepro_session", "")
+        if _sessions.get(session, 0) <= time.time():
+            return JSONResponse(status_code=401, content={"detail": "Authorize the environment-configured GitHub maintainer first."})
+    return await call_next(request)
 
 # ─── In-Memory & SQLite Dual Persistence State ──────────────────────────────
 
@@ -198,82 +211,50 @@ class GitHubAuthorizeRequest(BaseModel):
     username: Optional[str] = None
 
 @app.post("/api/github/authorize")
-def authorize_github(req: GitHubAuthorizeRequest):
-    """Authorizes user with GitHub and synchronizes repository list."""
-    global _github_user, _github_repos, _active_repo, _github_token
-    if req.token and is_valid_github_token(req.token):
-        _github_token = req.token.strip()
+def authorize_github(req: GitHubAuthorizeRequest, response: Response):
+    """Verify the environment-configured GitHub identity before creating a session."""
+    global _github_user, _github_repos, _active_repo
+    token = os.getenv("GITHUB_TOKEN", "").strip()
     username = (req.username or "").strip().lstrip("@")
+    if not token:
+        raise HTTPException(status_code=503, detail="GITHUB_TOKEN is not configured on the backend")
+    if not req.token or not hmac.compare_digest(req.token, token):
+        raise HTTPException(status_code=401, detail="A valid environment-configured GitHub credential is required")
     if not username:
-        username = "asfandkhan8585-cpu"
-    
-    _github_user = {
-        "authenticated": True,
-        "username": username,
-        "name": username,
-        "avatar_url": f"https://github.com/{username}.png",
-        "company": "Open Source Maintainer",
-        "public_repos": 0,
-        "role": "Verified Maintainer",
-    }
-    
-    headers = {"User-Agent": "GhostRepro-Gatekeeper"}
-    if req.token and req.token.startswith("ghp_"):
-        headers["Authorization"] = f"token {req.token}"
-        
+        raise HTTPException(status_code=422, detail="GitHub username is required")
+    headers = {"Authorization": f"Bearer {token}", "User-Agent": "GhostRepro"}
     try:
-        user_res = requests.get(f"https://api.github.com/users/{username}", headers=headers, timeout=4)
-        if user_res.status_code == 200:
-            udata = user_res.json()
-            _github_user["name"] = udata.get("name") or username
-            _github_user["avatar_url"] = udata.get("avatar_url") or _github_user["avatar_url"]
-            _github_user["company"] = udata.get("company") or "Independent Maintainer"
-            _github_user["public_repos"] = udata.get("public_repos") or 0
-    except Exception:
-        pass
-
-    try:
-        repos_res = requests.get(f"https://api.github.com/users/{username}/repos?sort=updated&per_page=12", headers=headers, timeout=4)
-        if repos_res.status_code == 200:
-            rdata = repos_res.json()
-            if isinstance(rdata, list) and len(rdata) > 0:
-                _github_repos = []
-                for idx, r in enumerate(rdata):
-                    _github_repos.append({
-                        "id": f"repo-{r.get('id', idx+1)}",
-                        "full_name": r.get("full_name", f"{username}/{r.get('name')}"),
-                        "name": r.get("name"),
-                        "description": r.get("description") or "Repository monitored by GhostRepro",
-                        "is_active": idx == 0,
-                        "is_private": bool(r.get("private")),
-                        "stars": r.get("stargazers_count", 0),
-                        "forks": r.get("forks_count", 0),
-                        "open_prs": 0,
-                        "quarantined_prs": 0,
-                        "repro_tests": 0,
-                        "language": r.get("language") or "Python",
-                        "default_branch": r.get("default_branch") or "main",
-                    })
-    except Exception:
-        pass
-
-    if _github_repos:
-        _active_repo = _github_repos[0]["full_name"]
-        for r in _github_repos:
-            save_repository(r)
+        user_response = requests.get("https://api.github.com/user", headers=headers, timeout=10)
+        if user_response.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"GitHub identity verification returned {user_response.status_code}")
+        user = user_response.json()
+        if user.get("login", "").lower() != username.lower():
+            raise HTTPException(status_code=403, detail="Username does not match the configured GitHub identity")
+        repo_response = requests.get("https://api.github.com/user/repos?sort=updated&per_page=100", headers=headers, timeout=10)
+        if repo_response.status_code != 200 or not isinstance(repo_response.json(), list):
+            raise HTTPException(status_code=502, detail=f"GitHub repository listing returned {repo_response.status_code}")
+        repos = [{"id": str(r["id"]), "full_name": r["full_name"], "name": r["name"],
+                  "description": r.get("description") or "", "is_active": idx == 0,
+                  "is_private": bool(r.get("private")), "stars": r.get("stargazers_count", 0),
+                  "forks": r.get("forks_count", 0), "open_prs": 0, "quarantined_prs": 0,
+                  "repro_tests": 0, "language": r.get("language") or "", "default_branch": r["default_branch"]}
+                 for idx, r in enumerate(repo_response.json())]
+    except requests.RequestException:
+        raise HTTPException(status_code=502, detail="GitHub identity/repository request failed")
+    _github_user = {"authenticated": True, "username": user["login"], "name": user.get("name") or user["login"],
+                    "avatar_url": user.get("avatar_url", ""), "company": user.get("company") or "",
+                    "public_repos": user.get("public_repos", 0), "role": "Verified Maintainer"}
+    _github_repos = repos
+    _active_repo = repos[0]["full_name"] if repos else ""
+    save_user(_github_user)
+    for repo in repos:
+        save_repository(repo)
+    if _active_repo:
         set_active_repository(_active_repo)
-    
-    save_user(_github_user, pat=req.token or "")
-        
-    _execution_logs.append({
-        "id": f"log-{uuid.uuid4().hex[:6]}",
-        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-        "stage": "CLEARANCE",
-        "level": "INFO",
-        "message": f"GitHub account @{username} authorized and saved to SQLite database. {len(_github_repos)} repositories ready.",
-    })
-    
-    return {"status": "success", "user": _github_user, "repos": _github_repos}
+    session = secrets.token_urlsafe(32)
+    _sessions[session] = time.time() + 3600
+    response.set_cookie("ghostrepro_session", session, httponly=True, samesite="strict", secure=False, max_age=3600)
+    return {"status": "success", "user": _github_user, "repos": repos}
 
 class AddRepoRequest(BaseModel):
     id: Optional[str] = None
@@ -395,8 +376,10 @@ def sync_github_repos():
                         repo_entry["language"] = r.get("language") or repo_entry.get("language", "Python")
                     save_repository(repo_entry)
                     updated += 1
-    except Exception:
-        pass
+        else:
+            raise HTTPException(status_code=502, detail=f"GitHub sync returned {resp.status_code}")
+    except requests.RequestException:
+        raise HTTPException(status_code=502, detail="GitHub sync request failed")
 
     log_item = {
         "id": f"log-{uuid.uuid4().hex[:6]}",
@@ -420,9 +403,9 @@ def get_config_endpoint():
         "model_config": dict(_config.get("model_config", {})),
         "repo_settings": dict(_config.get("repo_settings", {})),
     }
-    raw_api_key = safe_config["model_config"].get("api_key", "")
+    raw_api_key = os.getenv("GROQ_API_KEY", "")
     safe_config["model_config"]["api_key"] = "gsk_••••••••" if raw_api_key else ""
-    raw_secret = safe_config["repo_settings"].get("webhook_secret", "")
+    raw_secret = os.getenv("WEBHOOK_SECRET", "")
     safe_config["repo_settings"]["webhook_secret"] = "whsec_••••••••" if raw_secret else ""
     return safe_config
 
@@ -442,12 +425,16 @@ def update_config_endpoint(req: ConfigUpdateRequest):
         clean_model = dict(req.ai_model_config)
         if clean_model.get("api_key", "").startswith("gsk_••"):
             clean_model.pop("api_key", None)
+        clean_model.pop("api_key", None)
+        _config["model_config"].pop("api_key", None)
         _config["model_config"].update(clean_model)
         save_config("ai_model_config", _config["model_config"])
     if req.repo_settings:
         clean_repo = dict(req.repo_settings)
         if clean_repo.get("webhook_secret", "").startswith("whsec_••"):
             clean_repo.pop("webhook_secret", None)
+        clean_repo.pop("webhook_secret", None)
+        _config["repo_settings"].pop("webhook_secret", None)
         _config["repo_settings"].update(clean_repo)
         save_config("repo_settings", _config["repo_settings"])
         
@@ -511,7 +498,7 @@ def ping_webhook():
         "X-GitHub-Event": "ping",
         "Content-Type": "application/json",
     }
-    secret = _config.get("repo_settings", {}).get("webhook_secret", "").strip()
+    secret = os.getenv("WEBHOOK_SECRET", "").strip()
     if secret:
         sig = hmac.new(secret.encode("utf-8"), ping_payload, hashlib.sha256).hexdigest()
         headers["X-Hub-Signature-256"] = f"sha256={sig}"
@@ -552,22 +539,8 @@ def ping_webhook():
 
 @app.post("/api/config/regenerate-secret")
 def regenerate_webhook_secret():
-    """Generates a cryptographically secure webhook secret and persists it to SQLite."""
-    import secrets
-    new_secret = f"whsec_{secrets.token_hex(16)}"
-    _config["repo_settings"]["webhook_secret"] = new_secret
-    save_config("repo_settings", _config["repo_settings"])
-    
-    log_item = {
-        "id": f"log-{uuid.uuid4().hex[:6]}",
-        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-        "stage": "WEBHOOK",
-        "level": "INFO",
-        "message": "Generated new secure webhook secret and saved to SQLite configuration.",
-    }
-    _execution_logs.append(log_item)
-    save_log(log_item)
-    return {"status": "regenerated", "webhook_secret": new_secret}
+    """Credentials are managed by the process environment only."""
+    raise HTTPException(status_code=409, detail="Rotate WEBHOOK_SECRET in the backend environment and restart the service.")
 
 
 # ─── GitHub Webhook ──────────────────────────────────────────────────────────
@@ -577,8 +550,10 @@ async def github_webhook(request: Request):
     body = await request.body()
     
     # Verify HMAC-SHA256 signature if webhook secret is configured
-    configured_secret = _config.get("repo_settings", {}).get("webhook_secret", "").strip()
+    configured_secret = os.getenv("WEBHOOK_SECRET", "").strip()
     sig_header = request.headers.get("X-Hub-Signature-256")
+    if not configured_secret:
+        raise HTTPException(status_code=503, detail="WEBHOOK_SECRET is required")
     if configured_secret:
         if not sig_header:
             raise HTTPException(status_code=401, detail="Missing X-Hub-Signature-256 header")
@@ -591,6 +566,8 @@ async def github_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON in webhook payload")
 
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Webhook payload must be an object")
     event_type = request.headers.get("X-GitHub-Event")
     if event_type == "ping":
         return {"status": "pong", "message": "Ping received successfully"}
@@ -768,7 +745,7 @@ def simulate_pr_endpoint(req: SimulatePRRequest):
 
         # Run clearance check
         clearance = check_user_clearance(author, author_association)
-        status = "QUARANTINED" if clearance["status"] == "QUARANTINED" else "PASSED"
+        status = "QUARANTINED" if clearance["status"] == "QUARANTINED" else "RUNNING"
         trust_score = 0 if status == "QUARANTINED" else 80
 
         # Calculate AST blast radius and auto-scan dependencies from PR diff if available
@@ -786,7 +763,7 @@ def simulate_pr_endpoint(req: SimulatePRRequest):
                 total_additions = sum(f.get("additions", 0) for f in files)
                 total_deletions = sum(f.get("deletions", 0) for f in files)
                 blast_radius = {
-                    "statement_delta": total_changes,
+                    "statement_delta": None,
                     "additions": total_additions,
                     "deletions": total_deletions,
                     "files_changed": len(files),
@@ -799,10 +776,7 @@ def simulate_pr_endpoint(req: SimulatePRRequest):
                     patch = f.get("patch", "")
                     # Only parse legitimate dependency configuration files
                     is_dep_file = (
-                        "requirements" in fname
-                        or fname.endswith("pipfile")
-                        or fname.endswith("setup.py")
-                        or (fname.endswith("pyproject.toml") and "dependencies" in patch.lower())
+                        Path(fname).name.startswith("requirements") and fname.endswith(".txt")
                     )
                     if is_dep_file and patch:
                         for line in patch.splitlines():
@@ -909,15 +883,25 @@ def create_issue_repro(req: CreateIssueReproRequest):
                 detail=f"Autonomous test synthesis failed via Groq LPU: {str(e)}"
             )
 
+    if not _active_repo:
+        raise HTTPException(status_code=422, detail="Select a repository first")
+    test_dir = Path(__file__).resolve().parent.parent / "tests" / "repros" / hashlib.sha256(_active_repo.encode()).hexdigest()[:16]
+    test_dir.mkdir(parents=True, exist_ok=True)
+    test_path = test_dir / f"test_repro_{req.issue_number}.py"
+    test_path.write_text(code, encoding="utf-8")
+    execution = run_pytest_sandbox(str(test_path))
+    if execution["exit_code"] not in (0, 1):
+        raise HTTPException(status_code=502, detail=f"Reproduction execution failed: {execution['output']}")
     new_issue = {
         "issue_number": req.issue_number,
-        "repo": _active_repo or "primary-repo",
+        "repo": _active_repo,
         "title": req.title,
-        "repro_status": "RED",
+        "repro_status": "GREEN" if execution["exit_code"] == 0 else "RED",
         "test_file": f"test_repro_{req.issue_number}.py",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "code": code,
     }
+    _issue_repros[:] = [i for i in _issue_repros if (i.get("repo"), i["issue_number"]) != (_active_repo, req.issue_number)]
     _issue_repros.insert(0, new_issue)
     _repro_code_samples[req.issue_number] = code
     
@@ -936,12 +920,12 @@ def create_issue_repro(req: CreateIssueReproRequest):
 @app.post("/api/dashboard/issues/{issue_number}/run")
 def run_issue_repro(issue_number: int):
     """Executes the bug reproduction test in sandbox with real pytest execution."""
-    target_issue = next((i for i in _issue_repros if i["issue_number"] == issue_number), None)
+    target_issue = next((i for i in _issue_repros if i["issue_number"] == issue_number and i.get("repo") == _active_repo), None)
     if not target_issue:
         raise HTTPException(status_code=404, detail="Issue reproduction not found")
 
     # Get test code from sample cache, database, or stored repro
-    code = target_issue.get("code") or _repro_code_samples.get(issue_number)
+    code = target_issue.get("code")
     if not code:
         raise HTTPException(
             status_code=404,
@@ -949,7 +933,8 @@ def run_issue_repro(issue_number: int):
         )
 
     # Ensure tests directory exists inside sandbox boundary
-    test_dir = Path(__file__).resolve().parent.parent / "tests" / "repros"
+    repo_key = hashlib.sha256(_active_repo.encode()).hexdigest()[:16]
+    test_dir = Path(__file__).resolve().parent.parent / "tests" / "repros" / repo_key
     test_dir.mkdir(parents=True, exist_ok=True)
     test_file_path = test_dir / f"test_repro_{issue_number}.py"
     test_file_path.write_text(code, encoding="utf-8")
@@ -1003,8 +988,8 @@ def run_issue_repro(issue_number: int):
 
 @app.get("/api/dashboard/issues/{issue_number}/code")
 def get_issue_repro_code(issue_number: int):
-    target = next((i for i in _issue_repros if i["issue_number"] == issue_number), None)
-    code = (target.get("code") if target else None) or _repro_code_samples.get(issue_number)
+    target = next((i for i in _issue_repros if i["issue_number"] == issue_number and i.get("repo") == _active_repo), None)
+    code = (target.get("code") if target else None)
     if not code:
         raise HTTPException(status_code=404, detail=f"No reproduction code found for Issue #{issue_number}")
     return {"issue_number": issue_number, "test_file": f"test_repro_{issue_number}.py", "code": code}
@@ -1271,14 +1256,18 @@ def trigger_full_test_suite(req: SandboxTriggerRequest):
     # Execute REAL Qwen adversarial fuzzing evaluation
     fuzzing_res = run_adversarial_fuzzing_evaluation(
         pr_id=req.pr_id or "suite-test",
-        code_diff="def checkout(cart):\n    if not cart:\n        return 0\n    return sum(item.price for item in cart)"
+        code_diff=Path(test_path).read_text(encoding="utf-8")
     )
 
+    if fuzzing_res.get("status") == "error":
+        raise HTTPException(status_code=502, detail=fuzzing_res.get("error", "LLM review failed"))
+    if not test_result["passed"] or fuzzing_res.get("status") != "passed":
+        raise HTTPException(status_code=409, detail={"message": "Verification failed", "pytest": test_result, "llm_review": fuzzing_res})
     _execution_logs.extend([
         {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "SANDBOX", "level": "INFO", "message": f"Ephemeral runner executing {test_path or 'regression test suite'}..."},
         {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "REPRO_TEST", "level": "PASS" if test_result["passed"] else "WARN", "message": f"Pytest exit code {test_result['exit_code']}: {test_result['output'].strip()[:100]}"},
-        {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "FUZZING", "level": "INFO", "message": f"Evaluating 128 adversarial mutations with Qwen on Groq LPU..."},
-        {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "FUZZING", "level": "PASS" if fuzzing_res.get("status") == "passed" else "WARN", "message": f"128 mutations evaluated: {fuzzing_res.get('groq_analysis', '0 cheats detected')[:90]}"},
+        {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "FUZZING", "level": "INFO", "message": f"Requesting static LLM code review; no mutations executed."},
+        {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "FUZZING", "level": "PASS" if fuzzing_res.get("status") == "passed" else "WARN", "message": f"LLM review: {fuzzing_res.get('groq_analysis', '0 cheats detected')[:90]}"},
         {"id": f"log-{uuid.uuid4().hex[:6]}", "timestamp": timestamp, "stage": "MERGE_GATE", "level": "PASS" if test_result["passed"] else "WARN", "message": "Verification complete. Security checks validated."},
     ])
     for l in _execution_logs[-5:]:
@@ -1290,7 +1279,7 @@ def trigger_full_test_suite(req: SandboxTriggerRequest):
         "stage": "SANDBOX_VERIFY",
         "status": "passed" if test_result["passed"] else "failed",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "message": f"Real sandbox suite executed: exit_code={test_result['exit_code']}, 128 mutations evaluated by Qwen.",
+        "message": f"Real sandbox suite executed: exit_code={test_result['exit_code']}, static LLM review completed; no mutations executed.",
     }
     _pipeline_events.insert(0, evt)
     save_pipeline_event(evt)
@@ -1314,6 +1303,11 @@ def execute_github_pr_incorporation(
     merge_method: str = "squash"
 ) -> dict:
     """Executes real GitHub REST API calls to review, approve, and merge a PR."""
+    stored = next((p for p in get_all_pull_requests() if p.get("repo") == repo and p.get("number") == pr_number), None)
+    proof = (stored or {}).get("test_result") or {}
+    verified_sha = proof.get("head_sha")
+    if not (proof.get("passed") is True and proof.get("llm_review") == "passed" and verified_sha):
+        return {"success": False, "message": "Persisted verification for the exact PR head is required before approval or merge."}
     eff_token = get_effective_github_token(token)
     headers = {
         "User-Agent": "GhostRepro-Gatekeeper",
@@ -1342,11 +1336,15 @@ def execute_github_pr_incorporation(
         results["message"] = "No GitHub personal access token available. Please provide a PAT with 'repo' scope."
         return results
 
-    default_body = (
-        review_body or 
-        f"🛡️ **GhostRepro Zero-Trust Gatekeeper**\n\n"
-        f"Pull request #{pr_number} approved and verified by maintainer via GhostRepro Mission Control Dashboard."
-    )
+    try:
+        current = requests.get(f"https://api.github.com/repos/{clean_repo}/pulls/{pr_number}", headers=headers, timeout=8)
+        if current.status_code != 200:
+            return {**results, "message": f"GitHub head lookup returned {current.status_code}"}
+        if current.json().get("head", {}).get("sha") != verified_sha:
+            return {**results, "message": "PR head changed; earlier verification is invalid. Run verification again."}
+    except requests.RequestException:
+        return {**results, "message": "GitHub head lookup failed"}
+    default_body = f"GhostRepro: pytest passed and LLM code review passed for commit {verified_sha}."
 
     # 1. Submit GitHub PR Review: APPROVE
     try:
@@ -1373,15 +1371,18 @@ def execute_github_pr_incorporation(
                 json={
                     "commit_title": f"Merge pull request #{pr_number} from {clean_repo} [GhostRepro Verified]",
                     "commit_message": f"Mathematically verified and merged by GhostRepro Zero-Trust Gatekeeper.\n\nReviewed-by: GhostRepro Maintainer",
-                    "merge_method": merge_method
+                    "merge_method": merge_method,
+                    "sha": verified_sha
                 },
                 timeout=8
             )
             results["merge_status"] = merge_resp.status_code
-            if merge_resp.status_code == 200:
+            if merge_resp.status_code == 200 and merge_resp.json().get("merged") is True:
                 results["merge_data"] = merge_resp.json()
                 results["success"] = True
                 results["message"] = f"✅ PR #{pr_number} was successfully approved and merged into {clean_repo} on GitHub!"
+            elif merge_resp.status_code == 404:
+                results["message"] = f"PR #{pr_number} was not found on GitHub in repository '{clean_repo}' (HTTP 404). Please ensure the pull request exists on GitHub before merging."
             elif merge_resp.status_code == 405:
                 results["message"] = f"PR #{pr_number} cannot be merged automatically on GitHub (merge conflict or head branch changed)."
             elif merge_resp.status_code == 409:
@@ -1397,13 +1398,15 @@ def execute_github_pr_incorporation(
         results["success"] = bool(results.get("review_status") in (200, 201))
         results["message"] = f"✅ PR #{pr_number} review approved on GitHub!"
 
-    # 3. Post confirmation comment on the PR issue timeline
+    # Report success only after GitHub confirms it.
+    if not results["success"]:
+        return results
     try:
         comment_url = f"https://api.github.com/repos/{clean_repo}/issues/{pr_number}/comments"
         cmt_resp = requests.post(
             comment_url,
             headers=headers,
-            json={"body": f"🛡️ **GhostRepro Gatekeeper**: Pull Request #{pr_number} has been mathematically verified and incorporated into `{clean_repo}` on GitHub."},
+            json={"body": f"🛡️ **GhostRepro Gatekeeper**: Pull Request #{pr_number} has been merged after recorded pytest and LLM review checks into `{clean_repo}` on GitHub."},
             timeout=5
         )
         results["comment_status"] = cmt_resp.status_code
@@ -1433,6 +1436,8 @@ def authorize_quarantined_user(username: str, body: AuthorizeRequest = Authorize
                 token=body.token,
                 review_body=f"🛡️ **GhostRepro Zero-Trust Gatekeeper**\n\nMaintainer released @{username} from quarantine.\n\nReason: {body.reason}"
             )
+            if not gh_action_result.get("success"):
+                raise HTTPException(status_code=409, detail=gh_action_result.get("message", "GitHub action failed"))
             pr["github_action_result"] = gh_action_result
 
             if body.merge_on_github:
@@ -1547,6 +1552,8 @@ def merge_github_pr_endpoint(req: PRMergeRequest):
         token=req.token,
         merge_method=req.merge_method or "squash"
     )
+    if not gh_res.get("success"):
+        raise HTTPException(status_code=409, detail=gh_res.get("message", "GitHub merge failed"))
     for pr in _pr_records:
         if pr.get("number") == req.pr_number and (pr.get("repo") == repo or not pr.get("repo")):
             if gh_res.get("success"):

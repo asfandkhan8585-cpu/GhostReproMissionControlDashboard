@@ -263,7 +263,7 @@ def save_user(user_data: dict, pat: str = ""):
             user_data.get("company", ""),
             user_data.get("public_repos", 0),
             user_data.get("role", "MAINTAINER"),
-            pat[:8] + "..." if pat else ""
+            ""
         ))
 
 

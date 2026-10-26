@@ -1,3 +1,32 @@
+# GhostRepro Mission Control
+
+> QA status (2026-10-26): prototype under integrity repair. The historical claims below are not current verification evidence. See [QA checklist](docs/QA_CHECKLIST.md) and [repair report](docs/QA_REPORT.md).
+
+## Current security and execution behavior
+
+- Supply credentials through the backend environment or ignored `.env`; never commit them. `.env.example` documents variable names.
+- Authorizing GitHub requires the credential matching backend `GITHUB_TOKEN` and its verified GitHub username. The credential stays in transient form state; an HttpOnly, one-hour session protects mutations. Local development uses HTTP; deploy behind HTTPS before exposure.
+- Webhooks require `WEBHOOK_SECRET` and a valid HMAC signature.
+- Approval/merge fails closed unless SQLite contains passing pytest and LLM review evidence for the current head SHA. GitHub merges include that SHA. The complete evidence-producing pipeline remains unverified.
+- LLM review is static AI review, not execution of 128 mutations. Malformed verdicts fail closed.
+- Studio playback is simulated and cannot update dashboard proof/metrics.
+- The subprocess runner is **not OS-level isolation**. Do not execute hostile code on a sensitive host.
+
+## Checks
+
+```sh
+npm install
+npm test
+npm run typecheck
+npm run build
+# Backend: install requirements plus httpx==0.27.2, then:
+python -m pytest backend/tests/test_integrity.py backend/demo_repo -q
+# Browser screenshots and axe audit require Edge and running localhost:8443:
+npm run test:ui
+```
+
+## Historical project description
+
 # 🛡️ GhostRepro: Autonomous Issue-to-Test Reproduction & Zero-Trust PR Gatekeeper
 
 <p align="center">

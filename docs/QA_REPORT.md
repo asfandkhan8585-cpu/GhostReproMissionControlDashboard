@@ -23,3 +23,5 @@ Vulture ran and found candidates; no files or dependencies were removed because 
 Do not push or open a release PR until the original final verification gates pass. No claim is made that all repository types work.
 
 Final browser audit executed: four serious violation groups found (contrast in scanner/logs/Studio and an unnamed Studio select). Targeted corrections applied; rerun result must be consulted before claiming accessibility passes. Knip found unused jest-dom dependency and five exported symbols; no removal performed.
+
+Latest completed audit: 8 after screenshots; one serious Studio color-contrast group remains. Latest build passes (JS 332.71 kB / gzip 98.22; CSS 64.38 kB / gzip 12.04), and TypeScript passes. Accessibility and comprehensive feature gates remain open, so no push or PR was attempted.

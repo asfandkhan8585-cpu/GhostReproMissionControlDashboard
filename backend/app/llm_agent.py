@@ -34,7 +34,7 @@ CRITICAL ZERO-TRUST RULES:
 
 GHOSTREPRO_FUZZING_SYSTEM_PROMPT = """You are GhostRepro Adversarial Mutation Engine.
 Your mission is to prevent AI-generated slop and hardcoded PR cheats from passing CI.
-Given a pull request diff and a bug reproduction test, evaluate 128 adversarial mutations:
+Given a pull request diff and a bug reproduction test, review potential edge cases without claiming to execute mutations:
 - Extreme boundary values (0, -1, 2**63 - 1, empty strings, null bytes)
 - Type confusion and NoneType injections
 - Idempotency & race conditions
@@ -43,7 +43,7 @@ Given a pull request diff and a bug reproduction test, evaluate 128 adversarial 
 Verify whether the PR provides a robust algorithmic fix or merely hardcodes a return value to pass the reproduction test.
 Provide your response in structured format:
 STATUS: PASSED | REJECTED
-MUTATIONS_EVALUATED: 128
+MUTATIONS_EVALUATED: 0
 CHEATS_DETECTED: 0
 ANALYSIS: Brief technical explanation.
 """
@@ -92,17 +92,15 @@ def query_groq(messages: list[dict], model: str = None, temperature: float = 0.2
         if response.status_code == 200:
             data = response.json()
             return data["choices"][0]["message"]["content"]
-        elif response.status_code == 404:
-            raise RuntimeError(f"Groq Model '{target_model}' not found (404).")
         else:
-            raise RuntimeError(f"Groq API Error ({response.status_code}): {response.text}")
+            raise RuntimeError(f"Groq API Error ({response.status_code})")
     except requests.RequestException as e:
         raise RuntimeError(f"Groq API connection failed: {str(e)}")
 
 
 def test_groq_connection(model: str = None) -> dict:
     """Validates connectivity and measures real LPU latency against Groq API."""
-    target_model = clean_model_name(model or GROQ_MODEL)
+    target_model = clean_model_name(model or os.getenv("GROQ_MODEL") or GROQ_MODEL)
     start_time = time.time()
     
     messages = [
@@ -110,17 +108,33 @@ def test_groq_connection(model: str = None) -> dict:
         {"role": "user", "content": "Ping."}
     ]
     
-    reply = query_groq(messages, model=target_model, max_tokens=20)
+    actual_model = target_model
+    try:
+        reply = query_groq(messages, model=target_model, max_tokens=20)
+    except RuntimeError as e:
+        if "404" in str(e):
+            for fb in ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]:
+                try:
+                    reply = query_groq(messages, model=fb, max_tokens=20)
+                    actual_model = fb
+                    break
+                except Exception:
+                    pass
+            else:
+                raise
+        else:
+            raise
+
     latency_ms = int((time.time() - start_time) * 1000)
     
     return {
         "status": "connected",
         "provider": "Groq Cloud (Open-Source LPU)",
-        "model": target_model,
+        "model": actual_model,
         "endpoint": GROQ_BASE_URL,
         "latency_ms": latency_ms,
         "reply": reply.strip(),
-        "message": f"{target_model} operational via Groq LPU ({latency_ms}ms latency). Ready for autonomous reproduction & fuzzing."
+        "message": f"{actual_model} operational via Groq LPU ({latency_ms}ms latency). Ready for autonomous reproduction & fuzzing."
     }
 
 
@@ -162,23 +176,26 @@ def run_adversarial_fuzzing_evaluation(pr_id: str, code_diff: str = "") -> dict:
     """
     messages = [
         {"role": "system", "content": GHOSTREPRO_FUZZING_SYSTEM_PROMPT},
-        {"role": "user", "content": f"Evaluate PR {pr_id} against 128 adversarial edge-case mutations. Code diff:\n{code_diff or 'Standard algorithmic bugfix.'}"}
+        {"role": "user", "content": f"Evaluate PR {pr_id} for potential edge-case defects (static LLM review only). Code diff:\n{code_diff or 'Standard algorithmic bugfix.'}"}
     ]
     
     try:
         eval_result = query_groq(messages, temperature=0.1, max_tokens=400)
         raw = eval_result.strip()
         
-        is_passed = True
+        is_passed = False
         cheats = 0
         
         status_match = re.search(r"STATUS:\s*(PASSED|REJECTED|FAILED)", raw, re.IGNORECASE)
+        if not status_match:
+            raise ValueError("Malformed LLM review: missing STATUS")
         if status_match:
             verdict = status_match.group(1).upper()
-            if verdict in ("REJECTED", "FAILED"):
-                is_passed = False
+            is_passed = verdict == "PASSED"
                 
         cheats_match = re.search(r"CHEATS_DETECTED:\s*(\d+)", raw, re.IGNORECASE)
+        if not cheats_match:
+            raise ValueError("Malformed LLM review: missing CHEATS_DETECTED")
         if cheats_match:
             cheats = int(cheats_match.group(1))
             if cheats > 0:
@@ -187,7 +204,8 @@ def run_adversarial_fuzzing_evaluation(pr_id: str, code_diff: str = "") -> dict:
         return {
             "status": "passed" if is_passed else "rejected",
             "pr_id": pr_id,
-            "mutations": 128,
+            "mutations": 0,
+            "review_type": "LLM code review (no mutations executed)",
             "cheats_detected": cheats,
             "groq_analysis": raw
         }
