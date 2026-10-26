@@ -103,6 +103,7 @@ GhostReproMissionControlDashboard/
 ├── src/
 │   ├── api.ts                    # Centralized resilient API client & local state store
 │   ├── App.tsx                   # Main Mission Control Dashboard component
+│   ├── LiveAgentStudio.tsx       # Live Model Code Manipulation & 128 Mutation Fuzzing Workbench
 │   ├── index.css                 # Dark mode design tokens & utility classes
 │   ├── main.tsx                  # React DOM mount entrypoint
 │   └── theme.css                 # Supplemental theme rules
@@ -163,6 +164,29 @@ This repository is equipped with 3 specialized agents located in `.agents/` and 
 - **Verification Rules**: Adjust minimum trust scores, toggle first-time bot quarantine, set blast-radius thresholds, and save rules with instant feedback.
 - **Models & Agents**: Select primary LLM (Qwen2.5-Coder 32B, DeepSeek, Claude 3.7 Sonnet, GPT-4o), set endpoints, ping connection with live latency measurement, and save settings.
 - **Settings**: Copy and ping webhook endpoints, regenerate webhook secrets, adjust sandbox timeouts, and export full config JSON.
+
+### 5. Live Agent Studio: Visual Code Manipulation Workbench
+- Accessible via the **Live Agent Studio [LAB]** sidebar tab or header button.
+- 7-Phase interactive workbench showcasing the model actively manipulating and verifying code:
+  - **Phase 1: AST Scan**: Animated token traversal isolating defects in `checkout.py` (missing bounds check allowing -25% discount).
+  - **Phase 2: Repro Synthesis**: Real-time typewriter effect streaming autonomous pytest creation (`test_repro_104.py`).
+  - **Phase 3: Sandbox RED**: Interactive terminal running pytest inside Docker container `sbx_8f2a91`, proving assertion failure.
+  - **Phase 4: Live Code Manipulation & Split Diff**: Real-time split editor displaying surgical patch insertion (`+ if not (0 <= percentage <= 100): raise ValueError`).
+  - **Phase 5: Sandbox GREEN**: Re-running pytest in sandbox, proving defect resolution in 32ms.
+  - **Phase 6: 128 Adversarial Mutation Attacks**: Interactive 16×8 matrix of 128 cells firing boundary tests, NaN/Inf, and None injections to defeat hardcoded AI cheats.
+  - **Phase 7: Zero-Trust Clearance**: Cryptographic approval proof signed, providing a 1-click **`🚀 Approve & Merge Fix on GitHub ↗`** button.
+- Includes 3 pre-built scenarios:
+  - `checkout-negative-discount` (Cart checkout subtotal exploit)
+  - `auth-session-race` (Token session concurrency race condition)
+  - `slopsquat-sanitizer` (Hallucinated package import sanitizer)
+
+### 6. Real GitHub Pull Request Incorporation & Automated Squash Merge
+- Approving or authorizing PRs through the UI (Overview recent scorecards, Quarantine cards, Pull request table, or Live Agent Studio) executes real GitHub REST API calls:
+  - **POST /repos/{repo}/pulls/{number}/reviews**: Submits an official review with `event: "APPROVE"` containing full Zero-Trust proof metrics.
+  - **PUT /repos/{repo}/pulls/{number}/merge**: Executes an automated squash merge into the repository's base branch.
+  - **POST /repos/{repo}/issues/{number}/comments**: Records a signed verification comment on the PR timeline.
+- **Dual-Layer Architecture**: Executes via FastAPI backend orchestrator (`/api/dashboard/prs/merge`) or direct browser fallback via `approveAndMergePR()`.
+- **Token Flexibility**: Accepts OAuth tokens (`gho_`), fine-grained PATs (`github_pat_`), and classic PATs (`ghp_`) with `repo` scope, automatically populated from `.env` or the **Manage Repos** modal.
 
 ---
 

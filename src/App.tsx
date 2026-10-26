@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import LiveAgentStudio from './LiveAgentStudio'
 import {
   getMetrics, getPRs, getQuarantine, getPipelineEvents,
   getIssueRepros, getSlopsquatFlags, getWhitelistedPackages,
   authorizeUser, rejectUser, getGitHubUser, authorizeGitHub,
+  approveAndMergePR,
   getGitHubRepos, selectRepo, syncGitHubRepos, addCustomRepo,
   getConfig, updateConfig, testLLM, pingWebhook, calculateAST,
   createIssueRepro, runIssueRepro, getIssueReproCode,
@@ -48,6 +50,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
     refresh: <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>,
     download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+    merge: <><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="M18 15v-3a6 6 0 0 0-6-6H6"/></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.shield}</svg>
 }
@@ -83,7 +86,13 @@ export default function App() {
   const [repos, setRepos] = useState<GitHubRepo[]>(initialRepos)
   const [activeRepo, setActiveRepo] = useState<string>('asfandkhan8585-cpu/GhostReproMissionControlDashboard')
   const [githubModalOpen, setGithubModalOpen] = useState(false)
-  const [githubPatInput, setGithubPatInput] = useState('')
+  const [githubPatInput, setGithubPatInput] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('github_pat') || (import.meta as any).env?.VITE_GITHUB_TOKEN || ''
+    }
+    return ''
+  })
+  const [mergingPrNumber, setMergingPrNumber] = useState<number | null>(null)
   const [githubUsernameInput, setGithubUsernameInput] = useState('')
   const [newRepoName, setNewRepoName] = useState('')
   const [newRepoDesc, setNewRepoDesc] = useState('')
@@ -96,6 +105,7 @@ export default function App() {
   const [newIssueTitle, setNewIssueTitle] = useState('')
   const [quickIssueTitle, setQuickIssueTitle] = useState('')
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [studioScenario, setStudioScenario] = useState<string>('checkout-negative-discount')
 
   // ── Live Backend State (CLEAN) ──
   const [backendOnline, setBackendOnline] = useState(true)
@@ -285,21 +295,35 @@ export default function App() {
 
   const handleAuthorizePR = async (username: string) => {
     setAuthorizing(username)
+    setNotice(`⚡ Authorizing @${username} and incorporating PR into GitHub...`)
     try {
-      await authorizeUser(username)
+      const res = await authorizeUser(username, githubPatInput || undefined)
       await refreshData()
-      setNotice(`✅ @${username}: execution authorized. Sandbox pass recorded!`)
-    } catch {
-      setNotice(`Authorized ${username}.`)
+      setNotice(res.message || `✅ @${username}: execution authorized and PR incorporated into GitHub!`)
+    } catch (err: any) {
+      setNotice(`Authorized ${username}: ${err.message || 'Updated locally.'}`)
     }
     setAuthorizing(null)
   }
 
+  const handleMergePR = async (repo: string, prNumber: number) => {
+    setMergingPrNumber(prNumber)
+    setNotice(`⚡ Contacting GitHub REST API to review, approve & merge PR #${prNumber}...`)
+    try {
+      const res = await approveAndMergePR(repo, prNumber, githubPatInput || undefined)
+      await refreshData()
+      setNotice(res.message)
+    } catch (err: any) {
+      setNotice(`⚠️ GitHub Merge: ${err.message || 'Failed to complete merge.'}`)
+    }
+    setMergingPrNumber(null)
+  }
+
   const handleRejectPR = async (username: string) => {
     try {
-      await rejectUser(username)
+      const res = await rejectUser(username, githubPatInput || undefined)
       await refreshData()
-      setNotice(`❌ @${username}: contribution rejected and blocked.`)
+      setNotice(res.message || `❌ @${username}: contribution rejected and closed on GitHub.`)
     } catch {
       setNotice(`Rejected contribution for ${username}.`)
     }
@@ -568,6 +592,25 @@ export default function App() {
             <span>◈</span> {config.model_config.model_name} <small>{config.model_config.context_window}</small>
           </span>
 
+          {/* ── Live Agent Studio Shortcut Button ── */}
+          <button
+            className="btn-secondary btn-sm"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              borderColor: tab === 'Live Agent Studio' ? '#58a6ff' : '#1f6feb66',
+              background: tab === 'Live Agent Studio' ? '#1f6feb25' : '#1f6feb10',
+              color: '#79c0ff'
+            }}
+            onClick={() => setTab('Live Agent Studio')}
+            title="Watch autonomous model manipulate code & run checks live"
+          >
+            <Icon name="zap" size={13}/>
+            <span>Live Agent Studio</span>
+            <span style={{ fontSize: 8, padding: '1px 5px', background: '#238636', color: '#fff', borderRadius: 3, fontWeight: 700 }}>LIVE</span>
+          </button>
+
           {/* ── GitHub Account Button ── */}
           {githubUser.authenticated && githubUser.username ? (
             <button
@@ -616,6 +659,7 @@ export default function App() {
           <div className="side-label">WORKSPACE</div>
           {([
             ['Overview', 'grid'],
+            ['Live Agent Studio', 'play'],
             ['Pull requests', 'branch'],
             ['Quarantine', 'shield'],
             ['Bug reproductions', 'bug'],
@@ -631,6 +675,7 @@ export default function App() {
             >
               <Icon name={icon}/>
               <span>{label}</span>
+              {label === 'Live Agent Studio' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#1f6feb', color: '#fff', borderRadius: 3, fontWeight: 700, marginLeft: 'auto' }}>LAB</span>}
               {label === 'Quarantine' && <b>{queue.length}</b>}
               {label === 'Pull requests' && <small>{prs.length}</small>}
               {label === 'Bug reproductions' && <small>{repros.length}</small>}
@@ -695,6 +740,9 @@ export default function App() {
               <button className="button" onClick={() => setTab('Execution logs')}>
                 <Icon name="terminal" size={15}/> Workstation logs <span>↗</span>
               </button>
+              <button className="button" style={{ color: '#79c0ff', borderColor: '#1f6feb80' }} onClick={() => setTab('Live Agent Studio')}>
+                <Icon name="zap" size={14}/> Live Agent Studio
+              </button>
               <button className="btn-primary" onClick={handleTriggerFullTest}>
                 <Icon name="play" size={13}/> Run Full Sandbox Suite
               </button>
@@ -740,6 +788,55 @@ export default function App() {
                     </div>
                   </article>
                 ))}
+              </section>
+
+              {/* ── Live Agent Code Manipulation Hero Card ── */}
+              <section className="panel" style={{
+                padding: '16px 20px',
+                background: 'linear-gradient(135deg, #131c26 0%, #0d1219 100%)',
+                border: '1px solid #28374d',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 16
+              }}>
+                <div style={{ maxWidth: 680 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span className="chip chip-blue" style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px' }}>
+                      ⚡ LIVE CODE MANIPULATOR
+                    </span>
+                    <span style={{ fontSize: 10, color: '#56d364', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span className="dot" style={{ background: '#3fb950', width: 6, height: 6 }}/> Qwen-2.5-Coder Active
+                    </span>
+                  </div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f0f6fc', margin: 0 }}>
+                    Watch the Model Manipulate Code & Verify Proofs Live
+                  </h3>
+                  <p style={{ fontSize: 11.5, color: '#8b949e', marginTop: 4, lineHeight: 1.4 }}>
+                    Step inside the interactive visual workbench. Watch the autonomous agent scan ASTs, synthesize failing pytest proofs [RED], write code patches live with split diffs, and blast 128 adversarial mutation tests [GREEN].
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <button
+                    className="btn-primary"
+                    style={{
+                      padding: '8px 18px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: '#1f6feb',
+                      borderColor: '#388bfd',
+                      boxShadow: '0 0 16px rgba(31, 111, 235, 0.35)'
+                    }}
+                    onClick={() => setTab('Live Agent Studio')}
+                  >
+                    <Icon name="play" size={14}/> Launch Live Agent Studio ➔
+                  </button>
+                </div>
               </section>
 
               {/* ── Active Pipeline ── */}
@@ -882,8 +979,13 @@ export default function App() {
                             {pr.author_association === 'NONE' ? 'First-time contributor' : 'Unverified bot persona'}
                           </div>
                           <div className="queue-actions">
-                            <button disabled={authorizing === pr.author} onClick={() => handleAuthorizePR(pr.author)}>
-                              <Icon name="check" size={12}/> {authorizing === pr.author ? 'Running…' : 'Authorize'}
+                            <button
+                              disabled={authorizing === pr.author}
+                              onClick={() => handleAuthorizePR(pr.author)}
+                              title="Authorize and merge pull request on GitHub"
+                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <Icon name="check" size={12}/> {authorizing === pr.author ? 'Merging on GitHub…' : 'Authorize & Merge on GitHub ↗'}
                             </button>
                             <button onClick={() => handleRejectPR(pr.author)}>Reject</button>
                           </div>
@@ -924,6 +1026,34 @@ export default function App() {
                 </section>
               </div>
             </>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              TAB: LIVE AGENT STUDIO (CODE MANIPULATION & VERIFICATION)
+             ════════════════════════════════════════════════════════════════ */}
+          {tab === 'Live Agent Studio' && (
+            <LiveAgentStudio
+              activeRepo={activeRepo}
+              config={config}
+              initialScenarioId={studioScenario}
+              setNotice={setNotice}
+              onMergePR={handleMergePR}
+              onRecordActivity={(evt, log) => {
+                setEvents(prev => [evt, ...prev.slice(0, 30)])
+                setExecutionLogs(prev => [log, ...prev.slice(0, 100)])
+                setMetrics(prev => ({
+                  ...prev,
+                  pipeline_events_24h: prev.pipeline_events_24h + 1
+                }))
+              }}
+              onVerifyFix={(issueNum) => {
+                setRepros(prev => prev.map(r => r.issue_number === issueNum ? { ...r, repro_status: 'GREEN' } : r))
+                setMetrics(prev => ({
+                  ...prev,
+                  active_red_tests: Math.max(0, prev.active_red_tests - 1)
+                }))
+              }}
+            />
           )}
 
           {/* ════════════════════════════════════════════════════════════════
@@ -1002,17 +1132,52 @@ export default function App() {
                         <td>
                           {r.status === 'QUARANTINED' ? (
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <button className="btn-primary btn-sm" onClick={() => handleAuthorizePR(r.author)}>
-                                Authorize
+                              <button
+                                className="btn-primary btn-sm"
+                                disabled={authorizing === r.author}
+                                onClick={() => handleAuthorizePR(r.author)}
+                                title="Authorize and incorporate pull request into GitHub"
+                                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                              >
+                                <Icon name="check" size={12}/> {authorizing === r.author ? 'Merging…' : 'Authorize & Merge on GitHub ↗'}
                               </button>
                               <button className="btn-danger btn-sm" onClick={() => handleRejectPR(r.author)}>
                                 Reject
                               </button>
                             </div>
+                          ) : r.status === 'PASSED' ? (
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              {r.pipeline_stage === 'MERGED_ON_GITHUB' ? (
+                                <span className="chip chip-green" style={{ fontSize: 9 }}>✓ Merged on GitHub</span>
+                              ) : (
+                                <button
+                                  className="btn-primary btn-sm"
+                                  disabled={mergingPrNumber === r.number}
+                                  onClick={() => handleMergePR(r.repo, r.number)}
+                                  title="Review, approve, and merge PR directly on GitHub"
+                                  style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                  <Icon name="merge" size={12}/> {mergingPrNumber === r.number ? 'Merging…' : 'Approve & Merge on GitHub ↗'}
+                                </button>
+                              )}
+                              <a
+                                href={`https://github.com/${r.repo}/pull/${r.number}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-secondary btn-sm"
+                                style={{ padding: '2px 6px', fontSize: 9 }}
+                                title="Open Pull Request on GitHub"
+                              >
+                                GitHub ↗
+                              </a>
+                            </div>
                           ) : (
-                            <button className="btn-secondary btn-sm" onClick={() => setNotice(`Viewing audit logs for PR #${r.number}`)}>
-                              Audit Log
-                            </button>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <span className="chip chip-red" style={{ fontSize: 9 }}>Blocked</span>
+                              <button className="btn-secondary btn-sm" onClick={() => setNotice(`Viewing audit logs for PR #${r.number}`)}>
+                                Audit Log
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1088,8 +1253,14 @@ export default function App() {
                     </div>
 
                     <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      <button className="btn-primary btn-sm" style={{ flex: 1 }} disabled={authorizing === pr.author} onClick={() => handleAuthorizePR(pr.author)}>
-                        <Icon name="check" size={12}/> {authorizing === pr.author ? 'Authorizing…' : 'Authorize & Run Sandbox'}
+                      <button
+                        className="btn-primary btn-sm"
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                        disabled={authorizing === pr.author}
+                        onClick={() => handleAuthorizePR(pr.author)}
+                        title="Authorize and merge pull request on GitHub"
+                      >
+                        <Icon name="check" size={12}/> {authorizing === pr.author ? 'Authorizing & Merging…' : 'Authorize & Merge on GitHub ↗'}
                       </button>
                       <button className="btn-danger btn-sm" onClick={() => handleRejectPR(pr.author)}>
                         Reject
@@ -1216,6 +1387,17 @@ export default function App() {
                                   <div style={{ display: 'flex', gap: 4 }}>
                                     <button className="btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>Code</button>
                                     <button className="btn-primary btn-sm" style={{ padding: '2px 6px', fontSize: 9 }} onClick={() => handleRunIssueRepro(r.issue_number)}>Execute</button>
+                                    <button
+                                      className="btn-secondary btn-sm"
+                                      style={{ padding: '2px 6px', fontSize: 9, color: '#79c0ff', border: '1px solid #1f6feb66' }}
+                                      onClick={() => {
+                                        setStudioScenario(r.issue_number === 105 ? 'auth-session-race' : r.issue_number === 106 ? 'slopsquat-sanitizer' : 'checkout-negative-discount')
+                                        setTab('Live Agent Studio')
+                                      }}
+                                      title="Watch autonomous model manipulate code & run checks live"
+                                    >
+                                      Studio ⚡
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -1243,6 +1425,16 @@ export default function App() {
                             </button>
                             <button className="btn-secondary btn-sm" style={{ padding: '3px 8px', fontSize: 9 }} onClick={() => handleViewCode(r.issue_number)}>
                               <Icon name="terminal" size={10}/> View Code
+                            </button>
+                            <button
+                              className="btn-secondary btn-sm"
+                              style={{ padding: '3px 8px', fontSize: 9, color: '#79c0ff', border: '1px solid #1f6feb66' }}
+                              onClick={() => {
+                                setStudioScenario(r.issue_number === 105 ? 'auth-session-race' : r.issue_number === 106 ? 'slopsquat-sanitizer' : 'checkout-negative-discount')
+                                setTab('Live Agent Studio')
+                              }}
+                            >
+                              <Icon name="play" size={10}/> Watch Manipulation
                             </button>
                           </div>
                         </div>
@@ -2263,12 +2455,12 @@ export default function App() {
                     />
                   </div>
                   <div className="form-field" style={{ marginBottom: 0 }}>
-                    <label>Personal Access Token (PAT) [Optional for private repos]</label>
+                    <label>Personal Access Token (PAT) [Required to approve & merge PRs on GitHub]</label>
                     <input
                       type="password"
                       value={githubPatInput}
                       onChange={e => setGithubPatInput(e.target.value)}
-                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                      placeholder="ghp_... or gho_... (needs 'repo' write scope)"
                     />
                   </div>
                 </div>
@@ -2454,6 +2646,17 @@ export default function App() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => { navigator.clipboard?.writeText(codeDrawer.code); setNotice('Pytest code copied to clipboard!') }}>
                 <Icon name="copy" size={13}/> Copy Code
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ color: '#79c0ff', border: '1px solid #1f6feb80' }}
+                onClick={() => {
+                  setCodeDrawer(null)
+                  setStudioScenario(codeDrawer.issue === 105 ? 'auth-session-race' : codeDrawer.issue === 106 ? 'slopsquat-sanitizer' : 'checkout-negative-discount')
+                  setTab('Live Agent Studio')
+                }}
+              >
+                <Icon name="zap" size={13}/> Watch Model Manipulate Live
               </button>
               <button className="btn-primary" onClick={() => { handleRunIssueRepro(codeDrawer.issue); setCodeDrawer(null) }}>
                 <Icon name="play" size={13}/> Execute in Sandbox

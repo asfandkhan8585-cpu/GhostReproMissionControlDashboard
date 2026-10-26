@@ -260,6 +260,11 @@ def run_all_tests():
     pipeline = req("/api/dashboard/pipeline")
     test("Pipeline returns events", "events" in pipeline)
 
+    # PR merge & incorporation endpoint check
+    merge_check = req("/api/dashboard/prs/merge", method="POST", data={"repo": "invalid-repo", "pr_number": -1}, expect_error=True)
+    test("PR merge endpoint returns response dictionary", isinstance(merge_check, dict))
+    test("PR merge validates invalid repo/pr number", merge_check.get("success") is False or "Invalid" in merge_check.get("message", ""))
+
     # ─── 15. Configuration CRUD ──────────────────────────────────────────
     print("\n[15/18] Configuration Read & Update")
     config = req("/api/config")

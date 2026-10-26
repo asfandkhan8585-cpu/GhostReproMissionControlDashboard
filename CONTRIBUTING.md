@@ -32,6 +32,12 @@ Before your pull request can be merged into `main`, it will be evaluated autonom
 - The test must pass on your PR branch (**GREEN**), mathematically proving the fix works.
 - Your code will be subjected to **128 adversarial fuzzing mutations** to ensure the fix does not contain trivial bypass cheats (e.g. `if discount == 150: return 50`).
 
+### 5. Real GitHub Upstream Incorporation & Squash Merge
+- Once all zero-trust criteria are met (AST blast radius passed, PyPI dependencies clean, RED ➔ GREEN flip confirmed, 128 mutation tests survived):
+  - Maintainers authorize your contribution directly in the Mission Control Dashboard or Live Agent Studio.
+  - The platform sends an official GitHub review approval (`POST /reviews`), performs an automated squash merge (`PUT /merge`), and posts a signed zero-trust proof badge to your PR timeline.
+  - If quarantined initially (first-time contributor or bot), maintainer authorization immediately triggers the GitHub review and merge flow.
+
 ---
 
 ## 🚀 Local Development Setup
@@ -58,7 +64,11 @@ npm run dev
 # Server will run on http://localhost:8443 or http://localhost:5173
 ```
 
-### 3. Backend Orchestrator & Groq LLM Setup
+### 3. Visual Verification in Live Agent Studio
+- Open `http://localhost:8443` and click **Live Agent Studio [LAB]** in the sidebar.
+- Run the autonomous workflow to observe the 7-phase verification pipeline in action (AST scan, streaming test synthesis, sandbox RED failure, live code diff patch, sandbox GREEN flip, and the 128 mutation test matrix).
+
+### 4. Backend Orchestrator & Groq LLM Setup
 ```bash
 cd backend
 pip install -r requirements.txt
